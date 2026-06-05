@@ -1,0 +1,44 @@
+# backend/main.py
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import settings
+from core.database import Base, engine
+from core.migrations import apply_lightweight_migrations
+from models import User, Vibe, VibeListen  # noqa: F401
+from routers.auth import router as auth_router
+from routers.health import router as health_router
+from routers.users import router as users_router
+from routers.vibes import router as vibes_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    apply_lightweight_migrations(engine)
+    print("Tables are ready: users, vibes, vibe_listens")
+    yield
+
+
+app = FastAPI(
+    title="Svibe API",
+    description="Audio-first social network backend service.",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+if settings.cors_allow_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(vibes_router)
