@@ -14,7 +14,12 @@
 - [x] Feed sesleri (`GET /vibes`) endpointi yazildi.
 - [x] Kayit, giris ve token tabanli auth eklendi.
 - [x] Golden Voice kilit acma mekanigi eklendi.
+- [x] Golden Voice client seciminden cikarilip backend kontrollu hale getirildi.
 - [x] Backend tarafinda 3 saniye dinleme olmadan swipe kilidi eklendi.
+- [x] Like/dislike swipe kaydi ve tek seslik kesif endpointi eklendi.
+- [x] Gizli hesap, takip istegi ve DM gizlilik ayari eklendi.
+- [x] DM thread ve mesaj endpointleri eklendi.
+- [x] Profil fotografi icin direkt upload endpointi eklendi.
 - [x] Gunluk konusma hakki reset mekanizmasi eklendi.
 - [x] AWS harcama uyarisi icin 1 USD budget olusturuldu.
 
@@ -22,16 +27,21 @@
 - [x] Flutter projesi `mobile/` altinda olusturuldu.
 - [x] Riverpod, Dio ve secure storage entegrasyonu yapildi.
 - [x] Kayit/giris ekranlari backend auth endpointlerine baglandi.
-- [x] Feed, profile ve DM UI iskeleti olusturuldu.
-- [x] Profile ekraninda profil resmi URL/placeholder destegi eklendi.
+- [x] Feed, profile, Cast ve DM UI iskeleti olusturuldu.
+- [x] Profile ekraninda galeriden fotograf secme/upload akisi eklendi.
 - [ ] Dilsiz giris ekrani ozel animasyon ve metinlerle cilalanacak.
 
 ## Faz 4: Core Mobil Mekanikler
-- [ ] Flutter tarafinda 3 saniye fitil animasyonu ve swipe kilidi.
-- [ ] Mikrofon kayit akisi.
-- [ ] Accelerometer ile telefonu savurarak ses gonderme (The Cast).
-- [ ] Feed oynatma ve dinleme baslatma entegrasyonu.
-- [ ] DM backend ve gercek mesajlasma entegrasyonu.
+- [x] Flutter tarafinda 3 saniye swipe kilidi.
+- [x] Flutter feed tek seslik kesif ve sag/sol/yukari gesture akisi.
+- [x] Cast ritueli icin olta atar gibi firlatma UI ve buton fallback.
+- [x] Cast ekranindan ses dosyasi secip `/vibes` upload endpointine gonderme.
+- [x] Mikrofon kayit akisi ve Cast upload baglantisi.
+- [x] Native accelerometer ile telefonu savurarak ses gonderme.
+- [x] Golden Voice icin shake your vibe sensör tetikleyici.
+- [x] Feed dinleme baslatma entegrasyonu.
+- [x] DM backend ve temel mesajlasma entegrasyonu.
+- [ ] Voice DM ses kaydi ve audio upload entegrasyonu.
 
 ## Faz 5: Guvenlik ve Yayina Hazirlik
 - [ ] AWS access key rotate edilecek ve yerel `.env` tekrar guncellenecek.

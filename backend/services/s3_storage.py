@@ -24,6 +24,12 @@ ALLOWED_AUDIO_CONTENT_TYPES = {
     "application/octet-stream",
 }
 
+ALLOWED_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
 
 def _has_s3_settings() -> bool:
     return all(
@@ -68,6 +74,17 @@ def _extension(filename: str | None) -> str:
     return suffix if suffix in allowed else ".bin"
 
 
+def _image_extension(filename: str | None, content_type: str | None) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in {".jpg", ".jpeg", ".png", ".webp"}:
+        return suffix
+    return {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }.get(content_type or "", ".bin")
+
+
 def _ensure_file_size(file_obj: BinaryIO) -> None:
     max_bytes = settings.MAX_AUDIO_FILE_SIZE_MB * 1024 * 1024
     current_position = file_obj.tell()
@@ -78,6 +95,19 @@ def _ensure_file_size(file_obj: BinaryIO) -> None:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Audio file is larger than {settings.MAX_AUDIO_FILE_SIZE_MB} MB.",
+        )
+
+
+def _ensure_profile_image_size(file_obj: BinaryIO) -> None:
+    max_bytes = 5 * 1024 * 1024
+    current_position = file_obj.tell()
+    file_obj.seek(0, 2)
+    size = file_obj.tell()
+    file_obj.seek(current_position)
+    if size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Profile image is larger than 5 MB.",
         )
 
 
@@ -143,6 +173,38 @@ def upload_audio_file(user_id: UUID, audio_file: UploadFile) -> str:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not upload audio to S3.",
+        ) from exc
+
+    return _audio_object_url(key)
+
+
+def upload_profile_image(user_id: UUID, image_file: UploadFile) -> str:
+    if image_file.content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported profile image type.",
+        )
+
+    _ensure_profile_image_size(image_file.file)
+    image_file.file.seek(0)
+
+    key = (
+        f"profiles/{user_id}/"
+        f"{uuid4()}{_image_extension(image_file.filename, image_file.content_type)}"
+    )
+    extra_args = {"ContentType": image_file.content_type or "application/octet-stream"}
+
+    try:
+        _client().upload_fileobj(
+            image_file.file,
+            settings.AWS_S3_BUCKET_NAME,
+            key,
+            ExtraArgs=extra_args,
+        )
+    except (BotoCoreError, ClientError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not upload profile image to S3.",
         ) from exc
 
     return _audio_object_url(key)

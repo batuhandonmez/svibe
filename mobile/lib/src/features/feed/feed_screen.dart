@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
+import '../../core/motion/motion_trigger.dart';
 import '../../core/models/svibe_models.dart';
 import '../auth/auth_controller.dart';
-import 'feed_providers.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -13,24 +16,150 @@ class FeedScreen extends ConsumerStatefulWidget {
 }
 
 class _FeedScreenState extends ConsumerState<FeedScreen> {
-  int _index = 0;
+  VibeFeedItem? _item;
+  bool _isLoading = true;
+  bool _isLocked = true;
+  String? _error;
+  Timer? _unlockTimer;
+  Timer? _autoplayTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadNext());
+  }
+
+  @override
+  void dispose() {
+    _unlockTimer?.cancel();
+    _autoplayTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadNext() async {
+    final auth = ref.read(authControllerProvider);
+    final token = auth.token;
+    if (token == null) {
+      return;
+    }
+    _unlockTimer?.cancel();
+    _autoplayTimer?.cancel();
+    setState(() {
+      _isLoading = true;
+      _isLocked = true;
+      _error = null;
+    });
+    try {
+      final api = ref.read(apiClientProvider);
+      final next = await api.discoverNext(token);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _item = next;
+        _isLoading = false;
+      });
+      if (next != null) {
+        await api.startListening(token, next.id);
+        _unlockTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() => _isLocked = false);
+          }
+        });
+        _autoplayTimer = Timer(Duration(seconds: next.duration.clamp(4, 30)), () {
+          if (mounted) {
+            _loadNext();
+          }
+        });
+      }
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        setState(() {
+          _error = exception.message;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _swipe(String direction) async {
+    final item = _item;
+    final token = ref.read(authControllerProvider).token;
+    if (item == null || token == null || _isLocked) {
+      return;
+    }
+    _autoplayTimer?.cancel();
+    try {
+      final result = await ref
+          .read(apiClientProvider)
+          .swipeVibe(token, item.id, direction: direction);
+      if (!mounted) {
+        return;
+      }
+      if (result.goldenVoiceUnlockPending) {
+        await _showGoldenVoiceRitual(item);
+      } else {
+        await _loadNext();
+      }
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        setState(() => _error = exception.message);
+      }
+    }
+  }
+
+  Future<void> _confirmGoldenUnlock(VibeFeedItem item) async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null) {
+      return;
+    }
+    await ref.read(apiClientProvider).swipeVibe(
+          token,
+          item.id,
+          direction: 'like',
+          goldenUnlockConfirmed: true,
+        );
+    ref.invalidate(userStatusProvider);
+    await _loadNext();
+  }
+
+  Future<void> _showGoldenVoiceRitual(VibeFeedItem item) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return _GoldenVoiceSheet(
+          onUnlock: () async {
+            Navigator.of(context).pop();
+            await _confirmGoldenUnlock(item);
+          },
+        );
+      },
+    );
+  }
+
+  void _openProfileIntent() {
+    final item = _item;
+    if (item == null) {
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _ProfilePreview(item: item),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final feed = ref.watch(feedProvider);
     final status = ref.watch(userStatusProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Svibe'),
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: () {
-              setState(() => _index = 0);
-              ref.invalidate(feedProvider);
-              ref.invalidate(userStatusProvider);
-            },
+            onPressed: _loadNext,
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -38,7 +167,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       body: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
           child: Column(
             children: [
               status.when(
@@ -47,35 +176,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 loading: () => const _StatusRail(status: null, loading: true),
               ),
               const SizedBox(height: 14),
+              if (_error != null) _InlineError(message: _error!),
+              if (_error != null) const SizedBox(height: 10),
               Expanded(
-                child: feed.when(
-                  data: (items) {
-                    if (items.isEmpty) {
-                      return const _EmptyFeed();
-                    }
-                    final current = items[_index.clamp(0, items.length - 1)];
-                    return Column(
-                      children: [
-                        Expanded(
-                          child: _SoloVibeCard(
-                            item: current,
-                            position: _index + 1,
-                            total: items.length,
+                child: _isLoading
+                    ? const _FeedSkeleton()
+                    : _item == null
+                        ? const _EmptyFeed()
+                        : _DiscoveryCard(
+                            item: _item!,
+                            isLocked: _isLocked,
+                            onLike: () => _swipe('like'),
+                            onDislike: () => _swipe('dislike'),
+                            onOpenProfile: _openProfileIntent,
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        _DeckControls(
-                          canGoBack: _index > 0,
-                          canGoNext: _index < items.length - 1,
-                          onBack: () => setState(() => _index--),
-                          onNext: () => setState(() => _index++),
-                        ),
-                      ],
-                    );
-                  },
-                  error: (error, _) => _ErrorState(message: error.toString()),
-                  loading: () => const _FeedSkeleton(),
-                ),
               ),
             ],
           ),
@@ -95,33 +209,28 @@ class _StatusRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final canUpload = status?.canUploadVibe ?? false;
-    final label = loading
-        ? 'Checking signal'
-        : canUpload
-            ? 'Mic is open'
-            : 'Listen-only';
+    final privacy = status?.isPrivate == true ? 'Private' : 'Public';
     final count = status == null
         ? '--'
         : '${status!.dailyVibeCount}/${status!.dailyVibeLimit}';
-
     return Container(
-      height: 52,
+      height: 54,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
           Icon(
-            canUpload ? Icons.radio_button_checked : Icons.radio_button_off,
+            canUpload ? Icons.mic : Icons.hearing,
             color: canUpload ? theme.colorScheme.primary : theme.colorScheme.secondary,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              label,
+              loading ? 'Checking signal' : privacy,
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
@@ -138,29 +247,49 @@ class _StatusRail extends StatelessWidget {
   }
 }
 
-class _SoloVibeCard extends StatelessWidget {
-  const _SoloVibeCard({
+class _DiscoveryCard extends StatelessWidget {
+  const _DiscoveryCard({
     required this.item,
-    required this.position,
-    required this.total,
+    required this.isLocked,
+    required this.onLike,
+    required this.onDislike,
+    required this.onOpenProfile,
   });
 
   final VibeFeedItem item;
-  final int position;
-  final int total;
+  final bool isLocked;
+  final VoidCallback onLike;
+  final VoidCallback onDislike;
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final listenText = item.listenStartedAt == null
-        ? 'Hold attention for 3 seconds'
-        : item.canSwipeNow
-            ? 'Swipe window open'
-            : 'Signal warming up';
-
-    return Card(
-      child: Padding(
+    final name = item.displayName?.isNotEmpty == true
+        ? item.displayName!
+        : item.username;
+    return GestureDetector(
+      onTap: onOpenProfile,
+      onHorizontalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity > 180) {
+          onLike();
+        } else if (velocity < -180) {
+          onDislike();
+        }
+      },
+      onVerticalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -180) {
+          onOpenProfile();
+        }
+      },
+      child: Container(
         padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          border: Border.all(color: theme.colorScheme.outline),
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -177,13 +306,13 @@ class _SoloVibeCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.username,
+                        name,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                       Text(
-                        '$position of $total in the room',
+                        '@${item.username}',
                         style: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w700,
@@ -193,77 +322,46 @@ class _SoloVibeCard extends StatelessWidget {
                   ),
                 ),
                 if (item.isGoldenVoice)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Text(
-                      'GOLD',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                  Icon(Icons.auto_awesome, color: theme.colorScheme.primary),
               ],
             ),
             const Spacer(),
-            Center(
-              child: Container(
-                width: 190,
-                height: 190,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: theme.colorScheme.primary,
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 118,
-                    height: 118,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.black,
-                      size: 72,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            _WaveDisc(isLocked: isLocked),
             const Spacer(),
             Text(
-              '${item.duration}s anonymous-first voice',
+              isLocked ? 'Listen first' : 'Choose the signal',
               textAlign: TextAlign.center,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
-              listenText,
+              isLocked
+                  ? '3 saniye dolunca like/dislike açılır.'
+                  : 'Sola pass, sağa like, yukarı profil.',
               textAlign: TextAlign.center,
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 22),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                minHeight: 9,
-                value: item.canSwipeNow ? 1 : item.listenStartedAt == null ? .08 : .58,
-                backgroundColor: theme.colorScheme.outline,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: isLocked ? null : onDislike,
+                    icon: const Icon(Icons.close),
+                    label: const Text('Pass'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: isLocked ? null : onLike,
+                    icon: const Icon(Icons.favorite),
+                    label: const Text('Like'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -272,39 +370,41 @@ class _SoloVibeCard extends StatelessWidget {
   }
 }
 
-class _DeckControls extends StatelessWidget {
-  const _DeckControls({
-    required this.canGoBack,
-    required this.canGoNext,
-    required this.onBack,
-    required this.onNext,
-  });
+class _WaveDisc extends StatelessWidget {
+  const _WaveDisc({required this.isLocked});
 
-  final bool canGoBack;
-  final bool canGoNext;
-  final VoidCallback onBack;
-  final VoidCallback onNext;
+  final bool isLocked;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: canGoBack ? onBack : null,
-            icon: const Icon(Icons.keyboard_arrow_left),
-            label: const Text('Previous'),
+    final theme = Theme.of(context);
+    return Center(
+      child: Container(
+        width: 220,
+        height: 220,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: theme.colorScheme.outline),
+        ),
+        child: Center(
+          child: Container(
+            width: 138,
+            height: 138,
+            decoration: BoxDecoration(
+              color: isLocked
+                  ? theme.colorScheme.surface
+                  : theme.colorScheme.primary,
+              shape: BoxShape.circle,
+              border: Border.all(color: theme.colorScheme.primary),
+            ),
+            child: Icon(
+              isLocked ? Icons.lock_clock : Icons.graphic_eq,
+              color: isLocked ? theme.colorScheme.primary : Colors.black,
+              size: 56,
+            ),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: canGoNext ? onNext : null,
-            icon: const Icon(Icons.keyboard_arrow_right),
-            label: const Text('Next voice'),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -325,10 +425,7 @@ class ProfileAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final initial = username.isEmpty ? 'S' : username[0].toUpperCase();
     if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: NetworkImage(imageUrl!),
-      );
+      return CircleAvatar(radius: radius, backgroundImage: NetworkImage(imageUrl!));
     }
     return CircleAvatar(
       radius: radius,
@@ -336,7 +433,7 @@ class ProfileAvatar extends StatelessWidget {
       child: Text(
         initial,
         style: TextStyle(
-          color: Colors.white,
+          color: Colors.black,
           fontSize: radius * .82,
           fontWeight: FontWeight.w900,
         ),
@@ -350,14 +447,7 @@ class _FeedSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
+    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
   }
 }
 
@@ -366,54 +456,193 @@ class _EmptyFeed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.graphic_eq, size: 46),
-              const SizedBox(height: 14),
-              Text(
-                'The room is quiet',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.radar, size: 46),
+            const SizedBox(height: 14),
+            Text(
+              'No public voices yet',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Açık hesaplardan yeni bir ses düştüğünde burada tek tek akar.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 6),
-              Text(
-                'One voice will appear here at a time.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
+class _InlineError extends StatelessWidget {
+  const _InlineError({required this.message});
 
   final String message;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.error.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoldenVoiceSheet extends StatefulWidget {
+  const _GoldenVoiceSheet({required this.onUnlock});
+
+  final Future<void> Function() onUnlock;
+
+  @override
+  State<_GoldenVoiceSheet> createState() => _GoldenVoiceSheetState();
+}
+
+class _GoldenVoiceSheetState extends State<_GoldenVoiceSheet> {
+  late final MotionTrigger _shakeMotion;
+  bool _isUnlocking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shakeMotion = MotionTrigger(
+      threshold: 20,
+      onTrigger: _unlock,
+    )..start();
+  }
+
+  @override
+  void dispose() {
+    _shakeMotion.stop();
+    super.dispose();
+  }
+
+  Future<void> _unlock() async {
+    if (_isUnlocking) {
+      return;
+    }
+    setState(() => _isUnlocking = true);
+    await widget.onUnlock();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 10, 22, 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Shake your vibe',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Golden Voice found. Shake the phone to unlock, or use the fallback.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: _isUnlocking ? null : _unlock,
+            icon: const Icon(Icons.vibration),
+            label: Text(_isUnlocking ? 'Unlocking...' : 'Unlock voice'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfilePreview extends StatelessWidget {
+  const _ProfilePreview({required this.item});
+
+  final VibeFeedItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = item.displayName?.isNotEmpty == true
+        ? item.displayName!
+        : item.username;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ProfileAvatar(
+                username: item.username,
+                imageUrl: item.profilePictureUrl,
+                radius: 34,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '@${item.username}',
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.person_add_alt),
+                  label: const Text('Follow'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.mail_outline),
+                  label: const Text('DM'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

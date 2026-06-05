@@ -20,8 +20,20 @@ class User(Base):
     username: Mapped[str] = mapped_column(
         String(50), unique=True, nullable=False
     )
+    display_name: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
+    bio: Mapped[str | None] = mapped_column(
+        String(240), nullable=True
+    )
     profile_picture_url: Mapped[str | None] = mapped_column(
         String(500), nullable=True
+    )
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    message_privacy: Mapped[str] = mapped_column(
+        String(20), default="everyone", nullable=False
     )
     password_hash: Mapped[str | None] = mapped_column(
         String(255), nullable=True

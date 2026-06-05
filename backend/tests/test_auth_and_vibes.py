@@ -1,12 +1,31 @@
 # backend/tests/test_auth_and_vibes.py
 from datetime import UTC, datetime, timedelta
 
+import pytest
 import routers.vibes as vibes_router
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from core.database import engine
+from core.database import Base, engine
+from core.migrations import apply_lightweight_migrations
 from main import app
+
+
+@pytest.fixture(autouse=True)
+def _clean_database():
+    Base.metadata.create_all(bind=engine)
+    apply_lightweight_migrations(engine)
+    with engine.begin() as connection:
+        for table in (
+            "dm_messages",
+            "dm_threads",
+            "vibe_swipes",
+            "vibe_listens",
+            "follows",
+            "vibes",
+            "users",
+        ):
+            connection.execute(text(f"DELETE FROM {table}"))
 
 
 def _username(prefix: str) -> str:
@@ -103,6 +122,8 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         "delete_audio_file",
         lambda audio_url: deleted_audio_urls.append(audio_url),
     )
+    monkeypatch.setattr(vibes_router.random, "random", lambda: 0.0)
+    monkeypatch.setattr(vibes_router, "MIN_LISTEN_SECONDS_BEFORE_SWIPE", 999)
 
     with TestClient(app) as client:
         owner = _register(client, "owner", is_vip=True)
@@ -122,6 +143,7 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         assert upload.status_code == 201
         vibe = upload.json()
         assert vibe["user_id"] == owner["user"]["id"]
+        assert vibe["is_golden_voice"] is True
         assert vibe["remaining_daily_vibe_count"] == 29
 
         owner_feed = client.get("/vibes", headers=_headers(owner))
@@ -138,15 +160,21 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         assert feed_vibe["can_swipe_at"] is None
         assert feed_vibe["can_swipe_now"] is False
 
+        discover = client.get("/vibes/discover/next", headers=_headers(listener))
+        assert discover.status_code == 200
+        assert discover.json()["item"]["id"] == vibe["id"]
+
         own_swipe = client.post(
-            f"/vibes/{vibe['id']}/swipe-right",
+            f"/vibes/{vibe['id']}/swipe",
             headers=_headers(owner),
+            json={"direction": "like"},
         )
         assert own_swipe.status_code == 400
 
         no_listen_swipe = client.post(
-            f"/vibes/{vibe['id']}/swipe-right",
+            f"/vibes/{vibe['id']}/swipe",
             headers=_headers(listener),
+            json={"direction": "like"},
         )
         assert no_listen_swipe.status_code == 403
 
@@ -155,7 +183,7 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
             headers=_headers(listener),
         )
         assert listen.status_code == 200
-        assert listen.json()["can_swipe_after_seconds"] == 3
+        assert listen.json()["can_swipe_after_seconds"] == 999
 
         listener_feed_after_listen = client.get("/vibes", headers=_headers(listener))
         assert listener_feed_after_listen.status_code == 200
@@ -169,8 +197,9 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         assert feed_vibe_after_listen["can_swipe_now"] is False
 
         too_soon_swipe = client.post(
-            f"/vibes/{vibe['id']}/swipe-right",
+            f"/vibes/{vibe['id']}/swipe",
             headers=_headers(listener),
+            json={"direction": "like"},
         )
         assert too_soon_swipe.status_code == 403
 
@@ -183,18 +212,38 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
                 ),
                 {
                     "started_at": datetime.now(UTC).replace(tzinfo=None)
-                    - timedelta(seconds=4),
+                    - timedelta(seconds=1000),
                     "user_id": listener["user"]["id"],
                     "vibe_id": vibe["id"],
                 },
             )
 
-        listener_swipe = client.post(
-            f"/vibes/{vibe['id']}/swipe-right",
+        pending_unlock = client.post(
+            f"/vibes/{vibe['id']}/swipe",
             headers=_headers(listener),
+            json={"direction": "like"},
+        )
+        assert pending_unlock.status_code == 200
+        assert pending_unlock.json()["golden_voice_unlock_pending"] is True
+
+        listener_swipe = client.post(
+            f"/vibes/{vibe['id']}/swipe",
+            headers=_headers(listener),
+            json={"direction": "like", "golden_unlock_confirmed": True},
         )
         assert listener_swipe.status_code == 200
         assert listener_swipe.json()["golden_voice_unlocked"] is True
+
+        repeated_swipe = client.post(
+            f"/vibes/{vibe['id']}/swipe",
+            headers=_headers(listener),
+            json={"direction": "dislike"},
+        )
+        assert repeated_swipe.status_code == 409
+
+        skipped_discover = client.get("/vibes/discover/next", headers=_headers(listener))
+        assert skipped_discover.status_code == 200
+        assert skipped_discover.json()["item"] is None
 
         listener_delete = client.delete(
             f"/vibes/{vibe['id']}",
@@ -216,3 +265,99 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         deleted_feed = client.get("/vibes", headers=_headers(listener))
         assert deleted_feed.status_code == 200
         assert all(item["id"] != vibe["id"] for item in deleted_feed.json()["items"])
+
+
+def test_private_profile_follow_and_dm_settings(monkeypatch):
+    monkeypatch.setattr(
+        vibes_router,
+        "upload_audio_file",
+        lambda user_id, audio: (
+            f"https://svibe-audio-dev.s3.eu-central-1.amazonaws.com/test/{user_id}/private.m4a"
+        ),
+    )
+    monkeypatch.setattr(vibes_router.random, "random", lambda: 0.99)
+
+    with TestClient(app) as client:
+        owner = _register(client, "private_owner", is_vip=True)
+        listener = _register(client, "private_listener", is_vip=True)
+
+        update = client.patch(
+            "/users/me",
+            headers=_headers(owner),
+            json={
+                "display_name": "Private Signal",
+                "bio": "low-noise profile",
+                "is_private": True,
+                "message_privacy": "followers",
+            },
+        )
+        assert update.status_code == 200
+        assert update.json()["is_private"] is True
+        assert update.json()["message_privacy"] == "followers"
+
+        upload = client.post(
+            "/vibes",
+            headers=_headers(owner),
+            data={"duration": "4"},
+            files={"audio": ("sample.m4a", b"audio", "audio/mp4")},
+        )
+        assert upload.status_code == 201
+        assert upload.json()["is_golden_voice"] is False
+
+        hidden = client.get("/vibes/discover/next", headers=_headers(listener))
+        assert hidden.status_code == 200
+        assert hidden.json()["item"] is None
+
+        request = client.post(
+            f"/users/{owner['user']['id']}/follow",
+            headers=_headers(listener),
+        )
+        assert request.status_code == 200
+        assert request.json()["status"] == "pending"
+
+        accept = client.post(
+            f"/users/{listener['user']['id']}/follow/accept",
+            headers=_headers(owner),
+        )
+        assert accept.status_code == 200
+        assert accept.json()["status"] == "accepted"
+
+        thread = client.post(
+            "/dm/threads",
+            headers=_headers(listener),
+            json={"user_id": owner["user"]["id"]},
+        )
+        assert thread.status_code == 201
+        assert thread.json()["peer"]["username"] == owner["user"]["username"]
+
+        message = client.post(
+            f"/dm/threads/{thread.json()['id']}/messages",
+            headers=_headers(listener),
+            json={"text": "heard your signal"},
+        )
+        assert message.status_code == 201
+        assert message.json()["text"] == "heard your signal"
+
+        inbox = client.get("/dm/threads", headers=_headers(owner))
+        assert inbox.status_code == 200
+        assert inbox.json()["items"][0]["last_message"]["text"] == "heard your signal"
+
+
+def test_dm_privacy_blocks_non_followers():
+    with TestClient(app) as client:
+        owner = _register(client, "dm_owner", is_vip=True)
+        stranger = _register(client, "dm_stranger", is_vip=True)
+
+        update = client.patch(
+            "/users/me",
+            headers=_headers(owner),
+            json={"message_privacy": "followers"},
+        )
+        assert update.status_code == 200
+
+        blocked = client.post(
+            "/dm/threads",
+            headers=_headers(stranger),
+            json={"user_id": owner["user"]["id"]},
+        )
+        assert blocked.status_code == 403

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/api/api_client.dart';
 import '../auth/auth_controller.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -15,17 +16,22 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Uint8List? _photoBytes;
+  bool _isUploadingPhoto = false;
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final status = ref.watch(userStatusProvider);
+    final statusValue = status.asData?.value;
     final user = auth.user;
     final theme = Theme.of(context);
+    final displayName = user?.displayName?.isNotEmpty == true
+        ? user!.displayName!
+        : user?.username ?? 'Svibe';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Signal'),
+        title: const Text('Profile'),
         actions: [
           IconButton(
             tooltip: 'Log out',
@@ -37,118 +43,140 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _EditableAvatar(
-                        username: user?.username ?? 'Svibe',
-                        bytes: _photoBytes,
-                        onTap: _pickPhoto,
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border.all(color: theme.colorScheme.outline),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _EditableAvatar(
+                      username: user?.username ?? 'Svibe',
+                      imageUrl: user?.profilePictureUrl,
+                      bytes: _photoBytes,
+                      isUploading: _isUploadingPhoto,
+                      onTap: _pickAndUploadPhoto,
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '@${user?.username ?? 'svibe'}',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _pickAndUploadPhoto,
+                            icon: const Icon(Icons.add_a_photo_outlined),
+                            label: const Text('Add photo'),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user?.username ?? 'Svibe user',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              user?.isVip == true
-                                  ? 'Founder frequency'
-                                  : 'Room member',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: _pickPhoto,
-                              icon: const Icon(Icons.add_a_photo_outlined),
-                              label: const Text('Change photo'),
-                            ),
-                          ],
-                        ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  user?.bio?.isNotEmpty == true
+                      ? user!.bio!
+                      : 'Seslerin profilinde yaşar; açık olanlar keşfe düşer.',
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 20),
+                status.when(
+                  data: (value) => Row(
+                    children: [
+                      _ProfileMetric(
+                        label: 'Casts',
+                        value: '${value?.dailyVibeCount ?? 0}',
+                      ),
+                      _ProfileMetric(
+                        label: 'Privacy',
+                        value: value?.isPrivate == true ? 'Private' : 'Public',
+                      ),
+                      _ProfileMetric(
+                        label: 'DM',
+                        value: _dmLabel(value?.messagePrivacy ?? 'everyone'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 22),
-                  status.when(
-                    data: (value) => Row(
-                      children: [
-                        _ProfileMetric(
-                          label: 'Casts',
-                          value: '${value?.dailyVibeCount ?? 0}',
-                        ),
-                        _ProfileMetric(
-                          label: 'Limit',
-                          value: '${value?.dailyVibeLimit ?? 0}',
-                        ),
-                        _ProfileMetric(
-                          label: 'Gate',
-                          value: value?.isMuted == true ? 'Muted' : 'Open',
-                        ),
-                      ],
-                    ),
-                    error: (_, __) => const Text('Status unavailable'),
-                    loading: () => const LinearProgressIndicator(),
-                  ),
-                ],
-              ),
+                  error: (_, __) => const Text('Status unavailable'),
+                  loading: () => const LinearProgressIndicator(),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Voice identity',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const _ProfileAction(
-                    icon: Icons.history_toggle_off,
-                    title: 'Cast memory',
-                    subtitle: 'Your sent voices will collect here.',
-                  ),
-                  const Divider(height: 26),
-                  const _ProfileAction(
-                    icon: Icons.lock_open_outlined,
-                    title: 'Access state',
-                    subtitle: 'Muted users unlock by discovering Golden Voice.',
-                  ),
-                  const Divider(height: 26),
-                  const _ProfileAction(
-                    icon: Icons.bolt_outlined,
-                    title: 'Daily rhythm',
-                    subtitle: 'Your cast count refreshes automatically.',
-                  ),
-                ],
-              ),
-            ),
+          _SettingsPanel(
+            isPrivate: statusValue?.isPrivate ?? false,
+            messagePrivacy: statusValue?.messagePrivacy ?? 'everyone',
+            onPrivacyChanged: _setPrivacy,
+            onDmChanged: _setDmPrivacy,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _pickPhoto() async {
+  String _dmLabel(String value) {
+    return switch (value) {
+      'followers' => 'Followers',
+      'off' => 'Off',
+      _ => 'Everyone',
+    };
+  }
+
+  Future<void> _setPrivacy(bool value) async {
+    final auth = ref.read(authControllerProvider);
+    final token = auth.token;
+    if (token == null) {
+      return;
+    }
+    final updated = await ref.read(apiClientProvider).updateMe(
+          token,
+          isPrivate: value,
+        );
+    auth.replaceUser(updated);
+    ref.invalidate(userStatusProvider);
+  }
+
+  Future<void> _setDmPrivacy(String value) async {
+    final auth = ref.read(authControllerProvider);
+    final token = auth.token;
+    if (token == null) {
+      return;
+    }
+    final updated = await ref.read(apiClientProvider).updateMe(
+          token,
+          messagePrivacy: value,
+        );
+    auth.replaceUser(updated);
+    ref.invalidate(userStatusProvider);
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null) {
+      return;
+    }
     final picker = ImagePicker();
     final file = await picker.pickImage(
       source: ImageSource.gallery,
@@ -162,7 +190,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _photoBytes = bytes);
+    setState(() {
+      _photoBytes = bytes;
+      _isUploadingPhoto = true;
+    });
+    try {
+      await ref.read(apiClientProvider).uploadProfilePhoto(
+            token,
+            bytes: bytes,
+            filename: file.name,
+          );
+      final updated = await ref.read(apiClientProvider).me(token);
+      ref.read(authControllerProvider).replaceUser(updated);
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(exception.message)),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
   }
 }
 
@@ -170,35 +220,47 @@ class _EditableAvatar extends StatelessWidget {
   const _EditableAvatar({
     required this.username,
     required this.onTap,
+    required this.isUploading,
+    this.imageUrl,
     this.bytes,
   });
 
   final String username;
+  final String? imageUrl;
   final Uint8List? bytes;
+  final bool isUploading;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final initial = username.isEmpty ? 'S' : username[0].toUpperCase();
+    ImageProvider? image;
+    if (bytes != null) {
+      image = MemoryImage(bytes!);
+    } else if (imageUrl != null && imageUrl!.isNotEmpty) {
+      image = NetworkImage(imageUrl!);
+    }
     return GestureDetector(
       onTap: onTap,
       child: Stack(
+        alignment: Alignment.center,
         children: [
           CircleAvatar(
-            radius: 48,
+            radius: 50,
             backgroundColor: Theme.of(context).colorScheme.secondary,
-            backgroundImage: bytes == null ? null : MemoryImage(bytes!),
-            child: bytes == null
+            backgroundImage: image,
+            child: image == null
                 ? Text(
                     initial,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Colors.black,
                       fontSize: 34,
                       fontWeight: FontWeight.w900,
                     ),
                   )
                 : null,
           ),
+          if (isUploading) const CircularProgressIndicator(strokeWidth: 2),
           Positioned(
             right: 0,
             bottom: 0,
@@ -254,47 +316,58 @@ class _ProfileMetric extends StatelessWidget {
   }
 }
 
-class _ProfileAction extends StatelessWidget {
-  const _ProfileAction({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
+class _SettingsPanel extends StatelessWidget {
+  const _SettingsPanel({
+    required this.isPrivate,
+    required this.messagePrivacy,
+    required this.onPrivacyChanged,
+    required this.onDmChanged,
   });
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
+  final bool isPrivate;
+  final String messagePrivacy;
+  final ValueChanged<bool> onPrivacyChanged;
+  final ValueChanged<String> onDmChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: .16),
-            borderRadius: BorderRadius.circular(14),
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Private account'),
+            subtitle: const Text('Gizli hesapların sesleri keşfe düşmez.'),
+            value: isPrivate,
+            onChanged: onPrivacyChanged,
           ),
-          child: Icon(icon, color: Theme.of(context).colorScheme.primary),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
+          const Divider(height: 26),
+          Text(
+            'DM permissions',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'everyone', label: Text('All')),
+              ButtonSegment(value: 'followers', label: Text('Followers')),
+              ButtonSegment(value: 'off', label: Text('Off')),
             ],
+            selected: {messagePrivacy},
+            onSelectionChanged: (value) => onDmChanged(value.first),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -67,15 +67,11 @@ class AuthController extends ChangeNotifier {
   Future<bool> register({
     required String username,
     required String password,
-    String? profilePictureUrl,
   }) {
     return _withLoading(() async {
       final session = await _api.register(
         username: username,
         password: password,
-        profilePictureUrl: profilePictureUrl?.isEmpty == true
-            ? null
-            : profilePictureUrl,
       );
       token = session.accessToken;
       user = session.user;
@@ -87,6 +83,11 @@ class AuthController extends ChangeNotifier {
     token = null;
     user = null;
     error = null;
+    notifyListeners();
+  }
+
+  void replaceUser(UserProfile profile) {
+    user = profile;
     notifyListeners();
   }
 

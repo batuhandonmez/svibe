@@ -59,14 +59,12 @@ class SvibeApiClient {
   Future<AuthSession> register({
     required String username,
     required String password,
-    String? profilePictureUrl,
   }) async {
     final response = await _post(
       '/auth/register',
       data: {
         'username': username,
         'password': password,
-        'profile_picture_url': profilePictureUrl,
       },
     );
     final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
@@ -106,6 +104,120 @@ class SvibeApiClient {
         .toList();
   }
 
+  Future<VibeFeedItem?> discoverNext(String token) async {
+    final response = await _get('/vibes/discover/next', token: token);
+    final data = response.data as Map<String, dynamic>;
+    final item = data['item'];
+    if (item is! Map<String, dynamic>) {
+      return null;
+    }
+    return VibeFeedItem.fromJson(item);
+  }
+
+  Future<void> startListening(String token, String vibeId) async {
+    await _post('/vibes/$vibeId/listen/start', token: token);
+  }
+
+  Future<SwipeResult> swipeVibe(
+    String token,
+    String vibeId, {
+    required String direction,
+    bool goldenUnlockConfirmed = false,
+  }) async {
+    final response = await _post(
+      '/vibes/$vibeId/swipe',
+      token: token,
+      data: {
+        'direction': direction,
+        'golden_unlock_confirmed': goldenUnlockConfirmed,
+      },
+    );
+    return SwipeResult.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> updateMe(
+    String token, {
+    String? displayName,
+    String? bio,
+    bool? isPrivate,
+    String? messagePrivacy,
+  }) async {
+    final response = await _patch(
+      '/users/me',
+      token: token,
+      data: {
+        if (displayName != null) 'display_name': displayName,
+        if (bio != null) 'bio': bio,
+        if (isPrivate != null) 'is_private': isPrivate,
+        if (messagePrivacy != null) 'message_privacy': messagePrivacy,
+      },
+    );
+    return UserProfile.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<String> uploadProfilePhoto(
+    String token, {
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final response = await _post(
+      '/users/me/photo',
+      token: token,
+      data: FormData.fromMap({
+        'photo': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
+    );
+    final data = response.data as Map<String, dynamic>;
+    return data['profile_picture_url'] as String;
+  }
+
+  Future<void> uploadVibe(
+    String token, {
+    required List<int> bytes,
+    required String filename,
+    required int duration,
+  }) async {
+    await _post(
+      '/vibes',
+      token: token,
+      data: FormData.fromMap({
+        'duration': duration,
+        'audio': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
+    );
+  }
+
+  Future<List<DmThread>> dmThreads(String token) async {
+    final response = await _get('/dm/threads', token: token);
+    final data = response.data as Map<String, dynamic>;
+    final items = data['items'] as List<dynamic>? ?? [];
+    return items
+        .map((item) => DmThread.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<DmMessage>> dmMessages(String token, String threadId) async {
+    final response = await _get('/dm/threads/$threadId/messages', token: token);
+    final data = response.data as Map<String, dynamic>;
+    final items = data['items'] as List<dynamic>? ?? [];
+    return items
+        .map((item) => DmMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<DmMessage> sendDmMessage(
+    String token,
+    String threadId, {
+    required String text,
+  }) async {
+    final response = await _post(
+      '/dm/threads/$threadId/messages',
+      token: token,
+      data: {'text': text},
+    );
+    return DmMessage.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<Response<dynamic>> _get(String path, {String? token}) {
     return _guarded(
       () => _dio.get<dynamic>(
@@ -118,6 +230,16 @@ class SvibeApiClient {
   Future<Response<dynamic>> _post(String path, {Object? data, String? token}) {
     return _guarded(
       () => _dio.post<dynamic>(
+        path,
+        data: data,
+        options: Options(headers: _headers(token)),
+      ),
+    );
+  }
+
+  Future<Response<dynamic>> _patch(String path, {Object? data, String? token}) {
+    return _guarded(
+      () => _dio.patch<dynamic>(
         path,
         data: data,
         options: Options(headers: _headers(token)),

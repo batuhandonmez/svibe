@@ -1,4 +1,5 @@
 # backend/routers/vibes.py
+import random
 from datetime import timedelta
 from uuid import UUID
 
@@ -10,13 +11,17 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from core.time import utc_now
+from models.follow import Follow
 from models.user import User
 from models.vibe import Vibe
 from models.vibe_listen import VibeListen
+from models.vibe_swipe import VibeSwipe
 from schemas.vibes import (
     DeleteVibeResponse,
+    DiscoverResponse,
     FeedResponse,
     ListenStartResponse,
+    SwipeRequest,
     SwipeResponse,
     VibeFeedItem,
     VibeRead,
@@ -30,6 +35,7 @@ from services.s3_storage import (
 
 router = APIRouter(prefix="/vibes", tags=["Vibes"])
 MIN_LISTEN_SECONDS_BEFORE_SWIPE = 3
+GOLDEN_VOICE_RATE = 0.03
 
 
 def _to_vibe_read(vibe: Vibe) -> VibeRead:
@@ -51,6 +57,7 @@ def _to_feed_item(vibe: Vibe, owner: User, listen: VibeListen | None) -> VibeFee
     return VibeFeedItem(
         **payload,
         username=owner.username,
+        display_name=owner.display_name,
         profile_picture_url=owner.profile_picture_url,
         listen_started_at=listen.started_at if listen is not None else None,
         can_swipe_at=can_swipe_at,
@@ -58,10 +65,32 @@ def _to_feed_item(vibe: Vibe, owner: User, listen: VibeListen | None) -> VibeFee
     )
 
 
+def _can_view_owner(owner: User, viewer: User, db: Session) -> bool:
+    if owner.id == viewer.id or not owner.is_private:
+        return True
+    relationship = db.scalar(
+        select(Follow).where(
+            Follow.follower_id == viewer.id,
+            Follow.following_id == owner.id,
+            Follow.status == "accepted",
+        )
+    )
+    return relationship is not None
+
+
+def _ensure_can_interact(vibe: Vibe, current_user: User, db: Session) -> User:
+    owner = db.get(User, vibe.user_id)
+    if owner is None or not _can_view_owner(owner, current_user, db):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active vibe not found.",
+        )
+    return owner
+
+
 @router.post("", response_model=VibeUploadResponse, status_code=status.HTTP_201_CREATED)
 def upload_vibe(
     duration: int = Form(...),
-    is_golden_voice: bool = Form(False),
     audio: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -87,7 +116,7 @@ def upload_vibe(
         user_id=current_user.id,
         audio_url=audio_url,
         duration=duration,
-        is_golden_voice=is_golden_voice,
+        is_golden_voice=random.random() < GOLDEN_VOICE_RATE,
     )
     current_user.daily_vibe_count -= 1
 
@@ -109,6 +138,37 @@ def upload_vibe(
         **_to_vibe_read(vibe).model_dump(),
         remaining_daily_vibe_count=current_user.daily_vibe_count,
     )
+
+
+@router.get("/discover/next", response_model=DiscoverResponse)
+def discover_next_vibe(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    swiped_ids = select(VibeSwipe.vibe_id).where(VibeSwipe.user_id == current_user.id)
+    statement = (
+        select(Vibe, User)
+        .join(User, User.id == Vibe.user_id)
+        .where(Vibe.expires_at > utc_now())
+        .where(Vibe.user_id != current_user.id)
+        .where(User.is_private.is_(False))
+        .where(Vibe.id.not_in(swiped_ids))
+        .order_by(Vibe.created_at.desc())
+        .limit(100)
+    )
+    rows = db.execute(statement).all()
+    if not rows:
+        return DiscoverResponse(item=None)
+
+    weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
+    vibe, owner = random.choices(rows, weights=weights, k=1)[0]
+    listen = db.scalar(
+        select(VibeListen).where(
+            VibeListen.user_id == current_user.id,
+            VibeListen.vibe_id == vibe.id,
+        )
+    )
+    return DiscoverResponse(item=_to_feed_item(vibe, owner, listen))
 
 
 @router.get("", response_model=FeedResponse)
@@ -134,6 +194,7 @@ def list_vibes(
         .join(User, User.id == Vibe.user_id)
         .where(Vibe.expires_at > utc_now())
         .where(Vibe.user_id != current_user.id)
+        .where(User.is_private.is_(False))
         .order_by(Vibe.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -180,6 +241,7 @@ def delete_vibe(
 
     audio_url = vibe.audio_url
     db.execute(delete(VibeListen).where(VibeListen.vibe_id == vibe.id))
+    db.execute(delete(VibeSwipe).where(VibeSwipe.vibe_id == vibe.id))
     db.delete(vibe)
     db.commit()
     delete_audio_file(audio_url)
@@ -204,6 +266,7 @@ def start_listening(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Users cannot listen-start their own vibes.",
         )
+    _ensure_can_interact(vibe, current_user, db)
 
     existing = db.scalar(
         select(VibeListen).where(
@@ -247,6 +310,21 @@ def swipe_right(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    return swipe_vibe(
+        vibe_id,
+        SwipeRequest(direction="like", golden_unlock_confirmed=True),
+        current_user,
+        db,
+    )
+
+
+@router.post("/{vibe_id}/swipe", response_model=SwipeResponse)
+def swipe_vibe(
+    vibe_id: UUID,
+    payload: SwipeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     vibe = db.get(Vibe, vibe_id)
     if vibe is None or vibe.expires_at <= utc_now():
         raise HTTPException(
@@ -256,7 +334,20 @@ def swipe_right(
     if vibe.user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Users cannot swipe right on their own vibes.",
+            detail="Users cannot swipe on their own vibes.",
+        )
+    _ensure_can_interact(vibe, current_user, db)
+
+    existing_swipe = db.scalar(
+        select(VibeSwipe).where(
+            VibeSwipe.user_id == current_user.id,
+            VibeSwipe.vibe_id == vibe.id,
+        )
+    )
+    if existing_swipe is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This vibe has already been swiped.",
         )
 
     listen = db.scalar(
@@ -278,22 +369,57 @@ def swipe_right(
             detail="Listen for at least 3 seconds before swiping.",
         )
 
-    vibe.swipe_right_count += 1
+    if (
+        payload.direction == "like"
+        and current_user.is_muted
+        and vibe.is_golden_voice
+        and not payload.golden_unlock_confirmed
+    ):
+        return SwipeResponse(
+            vibe_id=vibe.id,
+            direction=payload.direction,
+            swipe_right_count=vibe.swipe_right_count,
+            golden_voice_unlock_pending=True,
+            message="Golden Voice found. Shake your vibe to unlock speaking rights.",
+        )
+
+    if payload.direction == "like":
+        vibe.swipe_right_count += 1
+
+    swipe = VibeSwipe(
+        user_id=current_user.id,
+        vibe_id=vibe.id,
+        direction=payload.direction,
+    )
     unlocked = False
     message = None
 
-    if current_user.is_muted and vibe.is_golden_voice:
+    if (
+        payload.direction == "like"
+        and current_user.is_muted
+        and vibe.is_golden_voice
+        and payload.golden_unlock_confirmed
+    ):
         current_user.is_muted = False
         unlocked = True
-        message = "Golden Voice unlocked. Speaking rights granted."
+        message = "Shake your vibe complete. Speaking rights granted."
 
+    db.add(swipe)
     db.add(vibe)
     db.add(current_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This vibe has already been swiped.",
+        ) from exc
     db.refresh(vibe)
 
     return SwipeResponse(
         vibe_id=vibe.id,
+        direction=payload.direction,
         swipe_right_count=vibe.swipe_right_count,
         golden_voice_unlocked=unlocked,
         message=message,

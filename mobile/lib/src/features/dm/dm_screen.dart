@@ -1,156 +1,128 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DmInboxScreen extends StatefulWidget {
+import '../../core/api/api_client.dart';
+import '../../core/models/svibe_models.dart';
+import '../auth/auth_controller.dart';
+
+class DmInboxScreen extends ConsumerStatefulWidget {
   const DmInboxScreen({super.key});
 
   @override
-  State<DmInboxScreen> createState() => _DmInboxScreenState();
+  ConsumerState<DmInboxScreen> createState() => _DmInboxScreenState();
 }
 
-class _DmInboxScreenState extends State<DmInboxScreen> {
-  int? _selectedIndex;
-
-  final _threads = const [
-    DmThread(
-      name: 'Mina',
-      handle: '@mina',
-      preview: 'left a 9s answer',
-      time: '2m',
-      unread: true,
-      pulse: .82,
-    ),
-    DmThread(
-      name: 'Arda',
-      handle: '@arda',
-      preview: 'waiting after your cast',
-      time: '18m',
-      unread: false,
-      pulse: .44,
-    ),
-    DmThread(
-      name: 'Nora',
-      handle: '@nora',
-      preview: 'sent a quiet reply',
-      time: '1h',
-      unread: false,
-      pulse: .63,
-    ),
-  ];
+class _DmInboxScreenState extends ConsumerState<DmInboxScreen> {
+  DmThread? _selectedThread;
 
   @override
   Widget build(BuildContext context) {
-    final selected = _selectedIndex == null ? null : _threads[_selectedIndex!];
+    if (_selectedThread != null) {
+      return _DmThreadView(
+        thread: _selectedThread!,
+        onBack: () => setState(() => _selectedThread = null),
+      );
+    }
+    return _DmInbox(
+      onThreadSelected: (thread) => setState(() => _selectedThread = thread),
+    );
+  }
+}
 
+class _DmInbox extends ConsumerWidget {
+  const _DmInbox({required this.onThreadSelected});
+
+  final ValueChanged<DmThread> onThreadSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+    final token = auth.token;
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Whispers')),
-      body: selected == null
-          ? ListView(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-              children: [
-                Text(
-                  'Voice-first DM',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Private threads feel like exchanged voice sparks, not chat rows.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                for (var i = 0; i < _threads.length; i++) ...[
-                  _ThreadTile(
-                    thread: _threads[i],
-                    onTap: () => setState(() => _selectedIndex = i),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ],
-            )
-          : ChatPlaceholder(
-              thread: selected,
-              onBack: () => setState(() => _selectedIndex = null),
+      appBar: AppBar(title: const Text('DM')),
+      body: token == null
+          ? const Center(child: Text('Log in to see messages.'))
+          : FutureBuilder<List<DmThread>>(
+              future: ref.read(apiClientProvider).dmThreads(token),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return _DmError(message: snapshot.error.toString());
+                }
+                final threads = snapshot.data ?? [];
+                if (threads.isEmpty) {
+                  return _EmptyDm(theme: theme);
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                  itemCount: threads.length + 1,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return _InboxHeader(theme: theme);
+                    }
+                    final thread = threads[index - 1];
+                    return _ThreadTile(
+                      thread: thread,
+                      onTap: () => onThreadSelected(thread),
+                    );
+                  },
+                );
+              },
             ),
     );
   }
 }
 
-class _ThreadTile extends StatelessWidget {
+class _ThreadTile extends ConsumerWidget {
   const _ThreadTile({required this.thread, required this.onTap});
 
   final DmThread thread;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final peerName = thread.peer.displayName?.isNotEmpty == true
+        ? thread.peer.displayName!
+        : thread.peer.username;
+    final preview = thread.lastMessage?.text ?? 'No messages yet';
     return InkWell(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(10),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          border: Border.all(
-            color: thread.unread
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outline,
-          ),
-          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: theme.colorScheme.outline),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
-            _PulseAvatar(name: thread.name, pulse: thread.pulse),
+            _DmAvatar(peer: thread.peer, compact: false),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          thread.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 17,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        thread.time,
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    peerName,
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
                   ),
-                  const SizedBox(height: 7),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.graphic_eq,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          '${thread.handle} ${thread.preview}',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 5),
+                  Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
             ),
+            const Icon(Icons.chevron_right),
           ],
         ),
       ),
@@ -158,152 +130,132 @@ class _ThreadTile extends StatelessWidget {
   }
 }
 
-class ChatPlaceholder extends StatelessWidget {
-  const ChatPlaceholder({
-    required this.thread,
-    required this.onBack,
-    super.key,
-  });
+class _DmThreadView extends ConsumerStatefulWidget {
+  const _DmThreadView({required this.thread, required this.onBack});
 
   final DmThread thread;
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 18, 10),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Back',
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back),
-              ),
-              _PulseAvatar(name: thread.name, pulse: thread.pulse, compact: true),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      thread.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
-                    ),
-                    Text(
-                      thread.handle,
-                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-            children: [
-              _VoiceBubble(
-                label: thread.preview,
-                seconds: 9,
-                mine: false,
-                progress: thread.pulse,
-              ),
-              const _VoiceBubble(
-                label: 'reply queued',
-                seconds: 5,
-                mine: true,
-                progress: .36,
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 52,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border.all(color: theme.colorScheme.outline),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.mic_none, color: theme.colorScheme.primary),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Hold to whisper',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              FilledButton(
-                onPressed: null,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(54, 52),
-                  padding: EdgeInsets.zero,
-                ),
-                child: const Icon(Icons.arrow_upward),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  ConsumerState<_DmThreadView> createState() => _DmThreadViewState();
 }
 
-class _PulseAvatar extends StatelessWidget {
-  const _PulseAvatar({
-    required this.name,
-    required this.pulse,
-    this.compact = false,
-  });
+class _DmThreadViewState extends ConsumerState<_DmThreadView> {
+  final _controller = TextEditingController();
+  late Future<List<DmMessage>> _messagesFuture;
 
-  final String name;
-  final double pulse;
-  final bool compact;
+  @override
+  void initState() {
+    super.initState();
+    _messagesFuture = _loadMessages();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<List<DmMessage>> _loadMessages() {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null) {
+      return Future.value([]);
+    }
+    return ref.read(apiClientProvider).dmMessages(token, widget.thread.id);
+  }
+
+  Future<void> _send() async {
+    final token = ref.read(authControllerProvider).token;
+    final text = _controller.text.trim();
+    if (token == null || text.isEmpty) {
+      return;
+    }
+    _controller.clear();
+    await ref.read(apiClientProvider).sendDmMessage(
+          token,
+          widget.thread.id,
+          text: text,
+        );
+    setState(() => _messagesFuture = _loadMessages());
+  }
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 42.0 : 58.0;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
+    final auth = ref.watch(authControllerProvider);
+    final theme = Theme.of(context);
+    final peerName = widget.thread.peer.displayName?.isNotEmpty == true
+        ? widget.thread.peer.displayName!
+        : widget.thread.peer.username;
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: widget.onBack,
+          icon: const Icon(Icons.arrow_back),
+        ),
+        title: Row(
+          children: [
+            _DmAvatar(peer: widget.thread.peer, compact: true),
+            const SizedBox(width: 10),
+            Expanded(child: Text(peerName)),
+          ],
+        ),
+      ),
+      body: Column(
         children: [
-          CircularProgressIndicator(
-            value: pulse,
-            strokeWidth: compact ? 3 : 4,
-            color: Theme.of(context).colorScheme.primary,
-            backgroundColor: Theme.of(context).colorScheme.outline,
+          Expanded(
+            child: FutureBuilder<List<DmMessage>>(
+              future: _messagesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final messages = snapshot.data ?? [];
+                if (messages.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'First whisper is still waiting.',
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    return _MessageBubble(
+                      message: message,
+                      mine: message.senderId == auth.user?.id,
+                    );
+                  },
+                );
+              },
+            ),
           ),
-          CircleAvatar(
-            radius: compact ? 16 : 22,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            child: Text(
-              name[0],
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'Write a quiet reply',
+                    ),
+                    onSubmitted: (_) => _send(),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton(
+                  onPressed: _send,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(54, 52),
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: const Icon(Icons.arrow_upward),
+                ),
+              ],
             ),
           ),
         ],
@@ -312,18 +264,11 @@ class _PulseAvatar extends StatelessWidget {
   }
 }
 
-class _VoiceBubble extends StatelessWidget {
-  const _VoiceBubble({
-    required this.label,
-    required this.seconds,
-    required this.mine,
-    required this.progress,
-  });
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({required this.message, required this.mine});
 
-  final String label;
-  final int seconds;
+  final DmMessage message;
   final bool mine;
-  final double progress;
 
   @override
   Widget build(BuildContext context) {
@@ -331,58 +276,108 @@ class _VoiceBubble extends StatelessWidget {
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        width: 270,
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
+        constraints: const BoxConstraints(maxWidth: 300),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: mine ? theme.colorScheme.primary : theme.colorScheme.surface,
           border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(22),
-            topRight: const Radius.circular(22),
-            bottomLeft: Radius.circular(mine ? 22 : 6),
-            bottomRight: Radius.circular(mine ? 6 : 22),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          message.text ?? 'Voice message',
+          style: TextStyle(
+            color: mine ? Colors.black : theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        child: Row(
+      ),
+    );
+  }
+}
+
+class _DmAvatar extends StatelessWidget {
+  const _DmAvatar({required this.peer, required this.compact});
+
+  final DmPeer peer;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = compact ? 18.0 : 24.0;
+    final initial = peer.username.isEmpty ? 'S' : peer.username[0].toUpperCase();
+    if (peer.profilePictureUrl != null && peer.profilePictureUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: NetworkImage(peer.profilePictureUrl!),
+      );
+    }
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: Theme.of(context).colorScheme.secondary,
+      child: Text(
+        initial,
+        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+}
+
+class _InboxHeader extends StatelessWidget {
+  const _InboxHeader({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Private signals',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'DM permissions come from each profile: everyone, followers, or off.',
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyDm extends StatelessWidget {
+  const _EmptyDm({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.play_arrow_rounded,
-              color: mine ? Colors.black : theme.colorScheme.primary,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: mine ? Colors.black : null,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 6,
-                      backgroundColor: mine
-                          ? Colors.black.withValues(alpha: .16)
-                          : theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
+            const Icon(Icons.markunread_mailbox_outlined, size: 46),
+            const SizedBox(height: 14),
             Text(
-              '${seconds}s',
-              style: TextStyle(
-                color: mine ? Colors.black : theme.colorScheme.onSurfaceVariant,
+              'No private signals',
+              style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w900,
               ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Bir profil DM kabul ediyorsa konuşma burada görünür.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -391,20 +386,18 @@ class _VoiceBubble extends StatelessWidget {
   }
 }
 
-class DmThread {
-  const DmThread({
-    required this.name,
-    required this.handle,
-    required this.preview,
-    required this.time,
-    required this.unread,
-    required this.pulse,
-  });
+class _DmError extends StatelessWidget {
+  const _DmError({required this.message});
 
-  final String name;
-  final String handle;
-  final String preview;
-  final String time;
-  final bool unread;
-  final double pulse;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Text(message, textAlign: TextAlign.center),
+      ),
+    );
+  }
 }

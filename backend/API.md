@@ -67,7 +67,11 @@ Authorization: Bearer <access_token>
 ```http
 POST /users
 GET /users/me/status
+PATCH /users/me
+POST /users/me/photo
 GET /users/{user_id}
+POST /users/{user_id}/follow
+POST /users/{user_id}/follow/accept
 ```
 
 `POST /users` applies the onboarding logic:
@@ -79,14 +83,45 @@ GET /users/{user_id}
 user is muted, how many daily vibe uploads remain, the user's daily limit, the
 next reset time, and whether uploading is currently allowed. If the reset time
 has passed, the backend refreshes the user's daily count before responding.
+It also returns account privacy and DM privacy.
+
+`PATCH /users/me` updates `display_name`, `bio`, `is_private`, and
+`message_privacy`.
+
+`POST /users/me/photo` accepts multipart `photo` upload and stores the profile
+image under the S3 `profiles/` prefix.
+
+Private accounts receive pending follow requests. Public accounts are followed
+immediately.
+
+### DM
+
+```http
+GET /dm/threads
+POST /dm/threads
+GET /dm/threads/{thread_id}/messages
+POST /dm/threads/{thread_id}/messages
+```
+
+`POST /dm/threads` accepts `{"user_id": "<target-user-id>"}`. The target user's
+`message_privacy` decides whether the thread can be created:
+- `everyone`: anyone can start a DM
+- `followers`: only accepted followers can start a DM
+- `off`: new DMs are blocked
+
+`POST /dm/threads/{thread_id}/messages` accepts text messages for now. The model
+also has `audio_url` so voice DM can be attached later without replacing the
+thread structure.
 
 ### Vibes
 
 ```http
 POST /vibes
 GET /vibes
+GET /vibes/discover/next
 DELETE /vibes/{vibe_id}
 POST /vibes/{vibe_id}/listen/start
+POST /vibes/{vibe_id}/swipe
 POST /vibes/{vibe_id}/swipe-right
 ```
 
@@ -98,7 +133,6 @@ Authorization: Bearer <access_token>
 
 `POST /vibes` accepts multipart form data:
 - `duration`
-- `is_golden_voice`
 - `audio`
 
 Rules:
@@ -106,13 +140,19 @@ Rules:
 - duration must be 1-30 seconds
 - daily vibe count must be greater than 0
 - successful upload decrements daily vibe count
+- Golden Voice is assigned by the backend only
 - daily vibe counts are restored automatically after the user's reset time
 - audio is uploaded to S3 and the DB stores the private object URL
 - API responses return a temporary presigned playback URL
 
-`GET /vibes` returns active vibes from other users. It does not include the
-authenticated user's own vibes. Feed items also include the owner's `username`,
-`profile_picture_url`, and the current user's listen/swipe state:
+`GET /vibes/discover/next` returns one discoverable public vibe. It excludes the
+authenticated user's own vibes, private accounts, expired vibes, and vibes the
+user has already liked/disliked. Selection is random with a light popularity
+weight.
+
+`GET /vibes` returns active public vibes from other users. Feed items also
+include the owner's `username`, `display_name`, `profile_picture_url`, and the
+current user's listen/swipe state:
 - `listen_started_at`
 - `can_swipe_at`
 - `can_swipe_now`
@@ -124,7 +164,23 @@ listening to a vibe. Users cannot start listening to their own vibes.
 removes related listen records, deletes the DB row, and then best-effort deletes
 the S3 audio object.
 
-`POST /vibes/{vibe_id}/swipe-right` unlocks a muted user only when the swiped vibe is a Golden Voice.
-It also requires a bearer token and applies the unlock to the authenticated user.
-Users cannot swipe right on their own vibes.
+`POST /vibes/{vibe_id}/swipe` accepts JSON:
+
+```json
+{"direction": "like", "golden_unlock_confirmed": false}
+```
+
+`direction` can be `like` or `dislike`. Likes increment
+`swipe_right_count`; dislikes simply remove the vibe from the user's future
+discover feed.
+
+If a muted user likes a Golden Voice without `golden_unlock_confirmed`, the API
+returns `golden_voice_unlock_pending=true` so the client can show the
+"Shake your vibe" ritual. Calling again with `golden_unlock_confirmed=true`
+grants speaking rights.
+
+`POST /vibes/{vibe_id}/swipe-right` remains as a compatibility endpoint for old
+clients and behaves like a confirmed like.
+
+Users cannot swipe on their own vibes.
 Users must start listening and wait at least 3 seconds before swiping.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../cast/cast_screen.dart';
 import '../dm/dm_screen.dart';
 import '../feed/feed_screen.dart';
 import '../profile/profile_screen.dart';
@@ -16,6 +17,7 @@ class _AppShellState extends State<AppShell> {
 
   final _pages = const [
     FeedScreen(),
+    CastScreen(),
     DmInboxScreen(),
     ProfileScreen(),
   ];
@@ -38,6 +40,11 @@ class _AppShellState extends State<AppShell> {
               icon: Icon(Icons.home_outlined),
               activeIcon: Icon(Icons.home),
               label: 'Feed',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.graphic_eq),
+              activeIcon: Icon(Icons.graphic_eq),
+              label: 'Cast',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.mail_outline),

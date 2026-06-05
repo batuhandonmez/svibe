@@ -32,3 +32,22 @@ def apply_lightweight_migrations(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE users ADD COLUMN daily_vibe_reset_at TIMESTAMP")
             )
+        if "display_name" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN display_name VARCHAR(80)")
+            )
+        if "bio" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN bio VARCHAR(240)")
+            )
+        if "is_private" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT FALSE")
+            )
+        if "message_privacy" not in user_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN message_privacy "
+                    "VARCHAR(20) NOT NULL DEFAULT 'everyone'"
+                )
+            )

@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.database import Base, engine
 from core.migrations import apply_lightweight_migrations
-from models import User, Vibe, VibeListen  # noqa: F401
+from models import DmMessage, DmThread, Follow, User, Vibe, VibeListen, VibeSwipe  # noqa: F401
 from routers.auth import router as auth_router
+from routers.dm import router as dm_router
 from routers.health import router as health_router
 from routers.users import router as users_router
 from routers.vibes import router as vibes_router
@@ -18,7 +19,7 @@ from routers.vibes import router as vibes_router
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     apply_lightweight_migrations(engine)
-    print("Tables are ready: users, vibes, vibe_listens")
+    print("Tables are ready: users, vibes, vibe_listens, vibe_swipes, follows, dm")
     yield
 
 
@@ -42,3 +43,4 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(vibes_router)
+app.include_router(dm_router)

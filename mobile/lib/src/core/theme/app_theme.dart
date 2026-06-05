@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const ember = Color(0xFFFFB000);
-  static const violet = Color(0xFF7C5CFF);
-  static const ink = Color(0xFF17130D);
-  static const night = Color(0xFF0E0D0A);
+  static const pulse = Color(0xFFFF5A5F);
+  static const cyan = Color(0xFF47D7C6);
+  static const ink = Color(0xFF101214);
+  static const night = Color(0xFF050607);
 
   static ThemeData light() {
     return _theme(
       brightness: Brightness.light,
-      scaffold: const Color(0xFFF7F2EA),
-      surface: const Color(0xFFFFFCF4),
+      scaffold: const Color(0xFFF6F4EF),
+      surface: const Color(0xFFFFFEFA),
       raised: Colors.white,
       text: ink,
-      muted: const Color(0xFF756E61),
-      border: const Color(0xFFE4D9C7),
-      accent: ember,
-      secondary: violet,
+      muted: const Color(0xFF6E7375),
+      border: const Color(0xFFDDE0E0),
+      accent: pulse,
+      secondary: cyan,
     );
   }
 
@@ -24,13 +24,13 @@ class AppTheme {
     return _theme(
       brightness: Brightness.dark,
       scaffold: night,
-      surface: const Color(0xFF17140F),
-      raised: const Color(0xFF211D16),
-      text: const Color(0xFFFFF8EA),
-      muted: const Color(0xFFB5A995),
-      border: const Color(0xFF343026),
-      accent: ember,
-      secondary: const Color(0xFF9B84FF),
+      surface: const Color(0xFF101214),
+      raised: const Color(0xFF16191B),
+      text: const Color(0xFFF7F7F2),
+      muted: const Color(0xFFA2AAAD),
+      border: const Color(0xFF2A3033),
+      accent: pulse,
+      secondary: cyan,
     );
   }
 
