@@ -13,14 +13,12 @@ class AuthScreen extends ConsumerStatefulWidget {
 class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _username = TextEditingController();
   final _password = TextEditingController();
-  final _photoUrl = TextEditingController();
   bool _isRegister = false;
 
   @override
   void dispose() {
     _username.dispose();
     _password.dispose();
-    _photoUrl.dispose();
     super.dispose();
   }
 
@@ -92,16 +90,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       prefixIcon: Icon(Icons.lock_outline),
                     ),
                   ),
-                  if (_isRegister) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _photoUrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Profile photo URL',
-                        prefixIcon: Icon(Icons.image_outlined),
-                      ),
-                    ),
-                  ],
                   if (auth.error != null) ...[
                     const SizedBox(height: 14),
                     Text(
@@ -148,7 +136,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       await auth.register(
         username: username,
         password: password,
-        profilePictureUrl: _photoUrl.text.trim(),
       );
     } else {
       await auth.login(username, password);

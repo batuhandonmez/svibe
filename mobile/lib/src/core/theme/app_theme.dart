@@ -1,27 +1,36 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  static const ember = Color(0xFFFFB000);
+  static const violet = Color(0xFF7C5CFF);
+  static const ink = Color(0xFF17130D);
+  static const night = Color(0xFF0E0D0A);
+
   static ThemeData light() {
     return _theme(
       brightness: Brightness.light,
-      scaffold: const Color(0xFFFAFAFA),
-      surface: Colors.white,
-      text: const Color(0xFF111111),
-      muted: const Color(0xFF737373),
-      border: const Color(0xFFE5E5E5),
-      accent: const Color(0xFF1DB954),
+      scaffold: const Color(0xFFF7F2EA),
+      surface: const Color(0xFFFFFCF4),
+      raised: Colors.white,
+      text: ink,
+      muted: const Color(0xFF756E61),
+      border: const Color(0xFFE4D9C7),
+      accent: ember,
+      secondary: violet,
     );
   }
 
   static ThemeData dark() {
     return _theme(
       brightness: Brightness.dark,
-      scaffold: const Color(0xFF050505),
-      surface: const Color(0xFF111111),
-      text: const Color(0xFFF5F5F5),
-      muted: const Color(0xFFA3A3A3),
-      border: const Color(0xFF242424),
-      accent: const Color(0xFF1ED760),
+      scaffold: night,
+      surface: const Color(0xFF17140F),
+      raised: const Color(0xFF211D16),
+      text: const Color(0xFFFFF8EA),
+      muted: const Color(0xFFB5A995),
+      border: const Color(0xFF343026),
+      accent: ember,
+      secondary: const Color(0xFF9B84FF),
     );
   }
 
@@ -29,26 +38,31 @@ class AppTheme {
     required Brightness brightness,
     required Color scaffold,
     required Color surface,
+    required Color raised,
     required Color text,
     required Color muted,
     required Color border,
     required Color accent,
+    required Color secondary,
   }) {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: accent,
       brightness: brightness,
       surface: surface,
+    ).copyWith(
+      primary: accent,
+      secondary: secondary,
+      surface: surface,
+      outline: border,
+      onSurface: text,
+      onSurfaceVariant: muted,
     );
 
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       scaffoldBackgroundColor: scaffold,
-      colorScheme: colorScheme.copyWith(
-        primary: accent,
-        surface: surface,
-        outline: border,
-      ),
+      colorScheme: colorScheme,
       textTheme: Typography.material2021().black.apply(
             bodyColor: text,
             displayColor: text,
@@ -61,51 +75,90 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         titleTextStyle: TextStyle(
           color: text,
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
+          fontSize: 23,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
         ),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: scaffold,
-        selectedItemColor: text,
+        selectedItemColor: accent,
         unselectedItemColor: muted,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
       cardTheme: CardThemeData(
-        color: surface,
+        color: raised,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(18),
           side: BorderSide(color: border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surface,
+        fillColor: raised,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: accent, width: 1.3),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: accent, width: 1.4),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: Colors.black,
-          minimumSize: const Size.fromHeight(48),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+          minimumSize: const Size.fromHeight(50),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
         ),
       ),
+      extensions: <ThemeExtension<dynamic>>[
+        SvibeColors(raised: raised, muted: muted, border: border),
+      ],
+    );
+  }
+}
+
+class SvibeColors extends ThemeExtension<SvibeColors> {
+  const SvibeColors({
+    required this.raised,
+    required this.muted,
+    required this.border,
+  });
+
+  final Color raised;
+  final Color muted;
+  final Color border;
+
+  @override
+  SvibeColors copyWith({Color? raised, Color? muted, Color? border}) {
+    return SvibeColors(
+      raised: raised ?? this.raised,
+      muted: muted ?? this.muted,
+      border: border ?? this.border,
+    );
+  }
+
+  @override
+  SvibeColors lerp(ThemeExtension<SvibeColors>? other, double t) {
+    if (other is! SvibeColors) {
+      return this;
+    }
+    return SvibeColors(
+      raised: Color.lerp(raised, other.raised, t) ?? raised,
+      muted: Color.lerp(muted, other.muted, t) ?? muted,
+      border: Color.lerp(border, other.border, t) ?? border,
     );
   }
 }
