@@ -62,10 +62,7 @@ class SvibeApiClient {
   }) async {
     final response = await _post(
       '/auth/register',
-      data: {
-        'username': username,
-        'password': password,
-      },
+      data: {'username': username, 'password': password},
     );
     final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
     await saveToken(session.accessToken);
@@ -97,6 +94,15 @@ class SvibeApiClient {
 
   Future<List<VibeFeedItem>> feed(String token) async {
     final response = await _get('/vibes', token: token);
+    final data = response.data as Map<String, dynamic>;
+    final items = data['items'] as List<dynamic>? ?? [];
+    return items
+        .map((item) => VibeFeedItem.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<VibeFeedItem>> myVibes(String token) async {
+    final response = await _get('/vibes/mine', token: token);
     final data = response.data as Map<String, dynamic>;
     final items = data['items'] as List<dynamic>? ?? [];
     return items
@@ -220,10 +226,7 @@ class SvibeApiClient {
 
   Future<Response<dynamic>> _get(String path, {String? token}) {
     return _guarded(
-      () => _dio.get<dynamic>(
-        path,
-        options: Options(headers: _headers(token)),
-      ),
+      () => _dio.get<dynamic>(path, options: Options(headers: _headers(token))),
     );
   }
 

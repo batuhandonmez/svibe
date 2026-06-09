@@ -3,7 +3,7 @@ import random
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.follow import Follow
 from models.user import User
+from models.vibe import Vibe
 from schemas.users import (
     FollowResponse,
     ProfilePhotoResponse,
@@ -97,7 +98,25 @@ def get_user(user_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/me/status", response_model=UserStatusResponse)
-def get_my_status(current_user: User = Depends(get_current_user)):
+def get_my_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    followers_count = db.scalar(
+        select(func.count()).select_from(Follow).where(
+            Follow.following_id == current_user.id,
+            Follow.status == "accepted",
+        )
+    )
+    following_count = db.scalar(
+        select(func.count()).select_from(Follow).where(
+            Follow.follower_id == current_user.id,
+            Follow.status == "accepted",
+        )
+    )
+    vibes_count = db.scalar(
+        select(func.count()).select_from(Vibe).where(Vibe.user_id == current_user.id)
+    )
     return UserStatusResponse(
         is_muted=current_user.is_muted,
         daily_vibe_count=current_user.daily_vibe_count,
@@ -106,6 +125,9 @@ def get_my_status(current_user: User = Depends(get_current_user)):
         can_upload_vibe=not current_user.is_muted and current_user.daily_vibe_count > 0,
         is_private=current_user.is_private,
         message_privacy=current_user.message_privacy,
+        followers_count=followers_count or 0,
+        following_count=following_count or 0,
+        vibes_count=vibes_count or 0,
     )
 
 

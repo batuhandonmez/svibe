@@ -57,7 +57,15 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   Future<void> _pickAudio() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['aac', 'm4a', 'mp3', 'ogg', 'opus', 'wav', 'webm'],
+      allowedExtensions: const [
+        'aac',
+        'm4a',
+        'mp3',
+        'ogg',
+        'opus',
+        'wav',
+        'webm',
+      ],
       withData: true,
     );
     final file = result?.files.single;
@@ -185,7 +193,9 @@ class _CastScreenState extends ConsumerState<CastScreen> {
 
     setState(() => _isUploading = true);
     try {
-      await ref.read(apiClientProvider).uploadVibe(
+      await ref
+          .read(apiClientProvider)
+          .uploadVibe(
             token,
             bytes: bytes,
             filename: filename,
@@ -217,7 +227,9 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   }
 
   void _show(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -264,7 +276,8 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                     duration: _duration,
                     enabled: canCast && !_isUploading && !_isRecording,
                     onPick: _pickAudio,
-                    onDurationChanged: (value) => setState(() => _duration = value),
+                    onDurationChanged: (value) =>
+                        setState(() => _duration = value),
                   ),
                   const SizedBox(height: 14),
                   Expanded(
@@ -272,7 +285,10 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                       onPanUpdate: canCast && !_isUploading && !_isRecording
                           ? (details) {
                               setState(() {
-                                _pull = (_pull - details.delta.dy).clamp(0, 160);
+                                _pull = (_pull - details.delta.dy).clamp(
+                                  0,
+                                  160,
+                                );
                                 _isArmed = _pull > 95;
                               });
                             }
@@ -295,14 +311,17 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                   ),
                   const SizedBox(height: 14),
                   FilledButton.icon(
-                    onPressed: canCast && !_isUploading && !_isRecording ? _cast : null,
+                    onPressed: canCast && !_isUploading && !_isRecording
+                        ? _cast
+                        : null,
                     icon: const Icon(Icons.send),
                     label: const Text('Cast with button'),
                   ),
                 ],
               );
             },
-            error: (_, __) => const Center(child: Text('Cast state unavailable')),
+            error: (_, __) =>
+                const Center(child: Text('Cast state unavailable')),
             loading: () => const Center(child: CircularProgressIndicator()),
           ),
         ),
@@ -334,7 +353,9 @@ class _RecordPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border.all(
-          color: isRecording ? theme.colorScheme.primary : theme.colorScheme.outline,
+          color: isRecording
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline,
         ),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -350,8 +371,8 @@ class _RecordPanel extends StatelessWidget {
               isRecording
                   ? 'Recording ${seconds}s / 30s'
                   : hasRecording
-                      ? 'Recording ready'
-                      : 'Record a new voice',
+                  ? 'Recording ready'
+                  : 'Record a new voice',
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
@@ -472,12 +493,11 @@ class _CastPad extends StatelessWidget {
               width: 150,
               height: 150,
               decoration: BoxDecoration(
-                color: isArmed ? theme.colorScheme.primary : theme.colorScheme.surface,
+                color: isArmed
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surface,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: theme.colorScheme.primary,
-                  width: 2,
-                ),
+                border: Border.all(color: theme.colorScheme.primary, width: 2),
               ),
               child: Icon(
                 isUploading ? Icons.cloud_upload : Icons.graphic_eq,
@@ -501,8 +521,8 @@ class _CastPad extends StatelessWidget {
                   isUploading
                       ? 'Casting...'
                       : isArmed
-                          ? 'Release to cast'
-                          : 'Pull up, throw, or flick the phone',
+                      ? 'Release to cast'
+                      : 'Pull up, throw, or flick the phone',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ],

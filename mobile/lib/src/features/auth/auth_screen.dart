@@ -46,7 +46,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           color: theme.colorScheme.primary,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.graphic_eq, color: Colors.black),
+                        child: const Icon(
+                          Icons.graphic_eq,
+                          color: Colors.black,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -133,10 +136,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final username = _username.text.trim();
     final password = _password.text;
     if (_isRegister) {
-      await auth.register(
-        username: username,
-        password: password,
-      );
+      await auth.register(username: username, password: password);
     } else {
       await auth.login(username, password);
     }

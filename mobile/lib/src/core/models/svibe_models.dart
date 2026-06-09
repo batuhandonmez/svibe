@@ -73,6 +73,9 @@ class UserStatus {
     required this.canUploadVibe,
     required this.isPrivate,
     required this.messagePrivacy,
+    required this.followersCount,
+    required this.followingCount,
+    required this.vibesCount,
     this.dailyVibeResetAt,
   });
 
@@ -83,6 +86,9 @@ class UserStatus {
   final bool canUploadVibe;
   final bool isPrivate;
   final String messagePrivacy;
+  final int followersCount;
+  final int followingCount;
+  final int vibesCount;
 
   factory UserStatus.fromJson(Map<String, dynamic> json) {
     return UserStatus(
@@ -93,6 +99,9 @@ class UserStatus {
       canUploadVibe: json['can_upload_vibe'] as bool? ?? false,
       isPrivate: json['is_private'] as bool? ?? false,
       messagePrivacy: json['message_privacy'] as String? ?? 'everyone',
+      followersCount: json['followers_count'] as int? ?? 0,
+      followingCount: json['following_count'] as int? ?? 0,
+      vibesCount: json['vibes_count'] as int? ?? 0,
     );
   }
 }
@@ -257,7 +266,9 @@ class DmThread {
       peer: DmPeer.fromJson(json['peer'] as Map<String, dynamic>),
       createdAt: _date(json['created_at']) ?? DateTime.now(),
       updatedAt: _date(json['updated_at']) ?? DateTime.now(),
-      lastMessage: last is Map<String, dynamic> ? DmMessage.fromJson(last) : null,
+      lastMessage: last is Map<String, dynamic>
+          ? DmMessage.fromJson(last)
+          : null,
     );
   }
 }

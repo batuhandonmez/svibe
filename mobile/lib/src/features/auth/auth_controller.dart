@@ -64,10 +64,7 @@ class AuthController extends ChangeNotifier {
     });
   }
 
-  Future<bool> register({
-    required String username,
-    required String password,
-  }) {
+  Future<bool> register({required String username, required String password}) {
     return _withLoading(() async {
       final session = await _api.register(
         username: username,

@@ -45,6 +45,9 @@ class UserStatusResponse(BaseModel):
     can_upload_vibe: bool
     is_private: bool
     message_privacy: str
+    followers_count: int = 0
+    following_count: int = 0
+    vibes_count: int = 0
 
 
 class UserUpdate(BaseModel):

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/svibe_models.dart';
+import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
 
 class DmInboxScreen extends ConsumerStatefulWidget {
@@ -40,7 +41,7 @@ class _DmInbox extends ConsumerWidget {
     final token = auth.token;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('DM')),
+      appBar: AppBar(title: const Text('Messages')),
       body: token == null
           ? const Center(child: Text('Log in to see messages.'))
           : FutureBuilder<List<DmThread>>(
@@ -91,14 +92,14 @@ class _ThreadTile extends ConsumerWidget {
         : thread.peer.username;
     final preview = thread.lastMessage?.text ?? 'No messages yet';
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(26),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(26),
         ),
         child: Row(
           children: [
@@ -110,7 +111,10 @@ class _ThreadTile extends ConsumerWidget {
                 children: [
                   Text(
                     peerName,
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
@@ -122,7 +126,19 @@ class _ThreadTile extends ConsumerWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: theme.extension<SvibeColors>()!.lime,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_forward,
+                color: Colors.black,
+                size: 18,
+              ),
+            ),
           ],
         ),
       ),
@@ -171,11 +187,9 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
       return;
     }
     _controller.clear();
-    await ref.read(apiClientProvider).sendDmMessage(
-          token,
-          widget.thread.id,
-          text: text,
-        );
+    await ref
+        .read(apiClientProvider)
+        .sendDmMessage(token, widget.thread.id, text: text);
     setState(() => _messagesFuture = _loadMessages());
   }
 
@@ -215,7 +229,9 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                   return Center(
                     child: Text(
                       'First whisper is still waiting.',
-                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   );
                 }
@@ -250,8 +266,9 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                 FilledButton(
                   onPressed: _send,
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(54, 52),
+                    minimumSize: const Size(54, 54),
                     padding: EdgeInsets.zero,
+                    shape: const CircleBorder(),
                   ),
                   child: const Icon(Icons.arrow_upward),
                 ),
@@ -273,21 +290,27 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 300),
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         decoration: BoxDecoration(
-          color: mine ? theme.colorScheme.primary : theme.colorScheme.surface,
+          color: mine ? colors.berry : theme.colorScheme.surface,
           border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(22),
+            topRight: const Radius.circular(22),
+            bottomLeft: Radius.circular(mine ? 22 : 6),
+            bottomRight: Radius.circular(mine ? 6 : 22),
+          ),
         ),
         child: Text(
           message.text ?? 'Voice message',
           style: TextStyle(
-            color: mine ? Colors.black : theme.colorScheme.onSurface,
+            color: mine ? Colors.white : theme.colorScheme.onSurface,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -305,7 +328,9 @@ class _DmAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = compact ? 18.0 : 24.0;
-    final initial = peer.username.isEmpty ? 'S' : peer.username[0].toUpperCase();
+    final initial = peer.username.isEmpty
+        ? 'S'
+        : peer.username[0].toUpperCase();
     if (peer.profilePictureUrl != null && peer.profilePictureUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: radius,
@@ -314,10 +339,13 @@ class _DmAvatar extends StatelessWidget {
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: Theme.of(context).colorScheme.secondary,
+      backgroundColor: Theme.of(context).extension<SvibeColors>()!.blue,
       child: Text(
         initial,
-        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900),
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -343,7 +371,7 @@ class _InboxHeader extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'DM permissions come from each profile: everyone, followers, or off.',
+            'Voice-first conversations shaped by profile permissions.',
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],

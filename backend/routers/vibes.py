@@ -221,6 +221,23 @@ def list_vibes(
     )
 
 
+@router.get("/mine", response_model=FeedResponse)
+def list_my_vibes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    vibes = db.scalars(
+        select(Vibe)
+        .where(Vibe.user_id == current_user.id)
+        .order_by(Vibe.created_at.desc())
+    ).all()
+    return FeedResponse(
+        items=[_to_feed_item(vibe, current_user, None) for vibe in vibes],
+        limit=len(vibes),
+        offset=0,
+    )
+
+
 @router.delete("/{vibe_id}", response_model=DeleteVibeResponse)
 def delete_vibe(
     vibe_id: UUID,

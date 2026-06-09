@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/models/svibe_models.dart';
+import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
+import '../feed/feed_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -17,14 +20,33 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Uint8List? _photoBytes;
   bool _isUploadingPhoto = false;
+  Future<List<VibeFeedItem>>? _vibesFuture;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _vibesFuture ??= _loadVibes();
+  }
+
+  Future<List<VibeFeedItem>> _loadVibes() {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null) {
+      return Future.value([]);
+    }
+    return ref.read(apiClientProvider).myVibes(token);
+  }
+
+  void _refreshVibes() {
+    setState(() => _vibesFuture = _loadVibes());
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final status = ref.watch(userStatusProvider);
-    final statusValue = status.asData?.value;
     final user = auth.user;
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     final displayName = user?.displayName?.isNotEmpty == true
         ? user!.displayName!
         : user?.username ?? 'Svibe';
@@ -34,114 +56,135 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: const Text('Profile'),
         actions: [
           IconButton(
+            tooltip: 'Refresh vibes',
+            onPressed: _refreshVibes,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
             tooltip: 'Log out',
             onPressed: () => ref.read(authControllerProvider).logout(),
             icon: const Icon(Icons.logout),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border.all(color: theme.colorScheme.outline),
-              borderRadius: BorderRadius.circular(10),
+      body: RefreshIndicator(
+        onRefresh: () async => _refreshVibes(),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 110),
+          children: [
+            Center(
+              child: _EditableHeroAvatar(
+                username: user?.username ?? 'Svibe',
+                imageUrl: user?.profilePictureUrl,
+                bytes: _photoBytes,
+                isUploading: _isUploadingPhoto,
+                onTap: _pickAndUploadPhoto,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 14),
+            Text(
+              displayName,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '@${user?.username ?? 'svibe'}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              user?.bio?.isNotEmpty == true
+                  ? user!.bio!
+                  : 'Your public vibes enter discovery. Private mode keeps them close.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 22),
+            status.when(
+              data: (value) => _StatsRow(status: value),
+              error: (_, __) => const Text('Status unavailable'),
+              loading: () => const LinearProgressIndicator(),
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: _pickAndUploadPhoto,
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: const Text('Change profile photo'),
+            ),
+            const SizedBox(height: 18),
+            _SettingsPanel(
+              isPrivate: status.asData?.value?.isPrivate ?? false,
+              messagePrivacy:
+                  status.asData?.value?.messagePrivacy ?? 'everyone',
+              onPrivacyChanged: _setPrivacy,
+              onDmChanged: _setDmPrivacy,
+            ),
+            const SizedBox(height: 26),
+            Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _EditableAvatar(
-                      username: user?.username ?? 'Svibe',
-                      imageUrl: user?.profilePictureUrl,
-                      bytes: _photoBytes,
-                      isUploading: _isUploadingPhoto,
-                      onTap: _pickAndUploadPhoto,
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            displayName,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '@${user?.username ?? 'svibe'}',
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: _pickAndUploadPhoto,
-                            icon: const Icon(Icons.add_a_photo_outlined),
-                            label: const Text('Add photo'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
                 Text(
-                  user?.bio?.isNotEmpty == true
-                      ? user!.bio!
-                      : 'Seslerin profilinde yaşar; açık olanlar keşfe düşer.',
-                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 20),
-                status.when(
-                  data: (value) => Row(
-                    children: [
-                      _ProfileMetric(
-                        label: 'Casts',
-                        value: '${value?.dailyVibeCount ?? 0}',
-                      ),
-                      _ProfileMetric(
-                        label: 'Privacy',
-                        value: value?.isPrivate == true ? 'Private' : 'Public',
-                      ),
-                      _ProfileMetric(
-                        label: 'DM',
-                        value: _dmLabel(value?.messagePrivacy ?? 'everyone'),
-                      ),
-                    ],
+                  'Vibes',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
                   ),
-                  error: (_, __) => const Text('Status unavailable'),
-                  loading: () => const LinearProgressIndicator(),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.lime,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: const Text(
+                    'public signal',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 14),
-          _SettingsPanel(
-            isPrivate: statusValue?.isPrivate ?? false,
-            messagePrivacy: statusValue?.messagePrivacy ?? 'everyone',
-            onPrivacyChanged: _setPrivacy,
-            onDmChanged: _setDmPrivacy,
-          ),
-        ],
+            const SizedBox(height: 12),
+            FutureBuilder<List<VibeFeedItem>>(
+              future: _vibesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.all(30),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final vibes = snapshot.data ?? [];
+                if (vibes.isEmpty) {
+                  return _EmptyVibes(onCastHint: () {});
+                }
+                return Column(
+                  children: [
+                    for (final vibe in vibes) ...[
+                      _VibeRow(vibe: vibe),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  String _dmLabel(String value) {
-    return switch (value) {
-      'followers' => 'Followers',
-      'off' => 'Off',
-      _ => 'Everyone',
-    };
   }
 
   Future<void> _setPrivacy(bool value) async {
@@ -150,10 +193,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (token == null) {
       return;
     }
-    final updated = await ref.read(apiClientProvider).updateMe(
-          token,
-          isPrivate: value,
-        );
+    final updated = await ref
+        .read(apiClientProvider)
+        .updateMe(token, isPrivate: value);
     auth.replaceUser(updated);
     ref.invalidate(userStatusProvider);
   }
@@ -164,10 +206,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (token == null) {
       return;
     }
-    final updated = await ref.read(apiClientProvider).updateMe(
-          token,
-          messagePrivacy: value,
-        );
+    final updated = await ref
+        .read(apiClientProvider)
+        .updateMe(token, messagePrivacy: value);
     auth.replaceUser(updated);
     ref.invalidate(userStatusProvider);
   }
@@ -195,18 +236,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _isUploadingPhoto = true;
     });
     try {
-      await ref.read(apiClientProvider).uploadProfilePhoto(
-            token,
-            bytes: bytes,
-            filename: file.name,
-          );
+      await ref
+          .read(apiClientProvider)
+          .uploadProfilePhoto(token, bytes: bytes, filename: file.name);
       final updated = await ref.read(apiClientProvider).me(token);
       ref.read(authControllerProvider).replaceUser(updated);
     } on SvibeApiException catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(exception.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.message)));
       }
     } finally {
       if (mounted) {
@@ -216,8 +255,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
-class _EditableAvatar extends StatelessWidget {
-  const _EditableAvatar({
+class _EditableHeroAvatar extends StatelessWidget {
+  const _EditableHeroAvatar({
     required this.username,
     required this.onTap,
     required this.isUploading,
@@ -233,53 +272,73 @@ class _EditableAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial = username.isEmpty ? 'S' : username[0].toUpperCase();
-    ImageProvider? image;
-    if (bytes != null) {
-      image = MemoryImage(bytes!);
-    } else if (imageUrl != null && imageUrl!.isNotEmpty) {
-      image = NetworkImage(imageUrl!);
-    }
-    return GestureDetector(
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(100),
       onTap: onTap,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            backgroundImage: image,
-            child: image == null
-                ? Text(
-                    initial,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
+          Container(
+            width: 132,
+            height: 132,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: theme.colorScheme.outline, width: 2),
+            ),
+            child: ClipOval(
+              child: bytes != null
+                  ? Image.memory(bytes!, fit: BoxFit.cover)
+                  : ProfileAvatar(
+                      username: username,
+                      imageUrl: imageUrl,
+                      radius: 66,
                     ),
-                  )
-                : null,
+            ),
           ),
-          if (isUploading) const CircularProgressIndicator(strokeWidth: 2),
           Positioned(
-            right: 0,
-            bottom: 0,
+            right: 3,
+            bottom: 6,
             child: Container(
-              width: 31,
-              height: 31,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
+                color: theme.colorScheme.primary,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  width: 3,
-                ),
               ),
-              child: const Icon(Icons.camera_alt, color: Colors.black, size: 17),
+              child: isUploading
+                  ? const Padding(
+                      padding: EdgeInsets.all(9),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.camera_alt, color: Colors.white, size: 18),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.status});
+
+  final UserStatus? status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _ProfileMetric(
+          label: 'Followers',
+          value: '${status?.followersCount ?? 0}',
+        ),
+        _ProfileMetric(
+          label: 'Following',
+          value: '${status?.followingCount ?? 0}',
+        ),
+        _ProfileMetric(label: 'Vibes', value: '${status?.vibesCount ?? 0}'),
+      ],
     );
   }
 }
@@ -292,25 +351,35 @@ class _ProfileMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          border: Border.all(color: theme.colorScheme.outline),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -333,30 +402,35 @@ class _SettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(26),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Private account'),
-            subtitle: const Text('Gizli hesapların sesleri keşfe düşmez.'),
+            title: const Text(
+              'Private account',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: const Text('Private vibes stay out of discovery.'),
             value: isPrivate,
             onChanged: onPrivacyChanged,
           ),
-          const Divider(height: 26),
-          Text(
-            'DM permissions',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w900,
+          const Divider(height: 24),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'DM privacy',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'everyone', label: Text('All')),
@@ -364,7 +438,129 @@ class _SettingsPanel extends StatelessWidget {
               ButtonSegment(value: 'off', label: Text('Off')),
             ],
             selected: {messagePrivacy},
-            onSelectionChanged: (value) => onDmChanged(value.first),
+            onSelectionChanged: (values) => onDmChanged(values.first),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VibeRow extends StatelessWidget {
+  const _VibeRow({required this.vibe});
+
+  final VibeFeedItem vibe;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 74,
+            height: 46,
+            child: CustomPaint(
+              painter: _MiniWavePainter(
+                color: vibe.isGoldenVoice ? colors.lime : colors.berry,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vibe.isGoldenVoice ? 'Golden voice' : 'Public vibe',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${vibe.duration}s · ${vibe.swipeRightCount} likes',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            vibe.isGoldenVoice ? Icons.auto_awesome : Icons.favorite,
+            color: vibe.isGoldenVoice ? colors.orange : colors.berry,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniWavePainter extends CustomPainter {
+  const _MiniWavePainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 4;
+    for (var i = 0; i < 11; i++) {
+      final h = 12 + (i % 5) * 7.0;
+      final x = i * size.width / 10;
+      canvas.drawLine(
+        Offset(x, size.height / 2 - h / 2),
+        Offset(x, size.height / 2 + h / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniWavePainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+
+class _EmptyVibes extends StatelessWidget {
+  const _EmptyVibes({required this.onCastHint});
+
+  final VoidCallback onCastHint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.graphic_eq, size: 42),
+          const SizedBox(height: 10),
+          Text(
+            'No vibes yet',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Cast your first voice to fill this profile.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
