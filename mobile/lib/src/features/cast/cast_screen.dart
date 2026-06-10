@@ -10,6 +10,7 @@ import 'package:record/record.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/motion/motion_trigger.dart';
+import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
 
 class CastScreen extends ConsumerStatefulWidget {
@@ -236,33 +237,34 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   Widget build(BuildContext context) {
     final status = ref.watch(userStatusProvider);
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cast')),
+      appBar: AppBar(
+        title: const Text('Cast'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton.filledTonal(
+              tooltip: 'Close',
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.close),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+          padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
           child: status.when(
             data: (value) {
               final canCast = value?.canUploadVibe ?? false;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Throw a voice',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    canCast
-                        ? 'Record up to 30 seconds, then cast it like a line.'
-                        : 'Your voice is locked. Find Golden Voice to speak.',
-                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 18),
+                  _CastHeader(canCast: canCast, colors: colors),
+                  const SizedBox(height: 14),
                   _RecordPanel(
                     isRecording: _isRecording,
                     seconds: _recordSeconds,
@@ -270,7 +272,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                     enabled: canCast && !_isUploading,
                     onToggle: _toggleRecording,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   _AudioPickerPanel(
                     file: _audioFile,
                     duration: _duration,
@@ -306,16 +308,11 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                         pull: _pull,
                         isArmed: _isArmed,
                         isUploading: _isUploading,
+                        canCast: canCast,
+                        isEnabled: canCast && !_isRecording,
+                        onCast: _cast,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: canCast && !_isUploading && !_isRecording
-                        ? _cast
-                        : null,
-                    icon: const Icon(Icons.send),
-                    label: const Text('Cast with button'),
                   ),
                 ],
               );
@@ -325,6 +322,70 @@ class _CastScreenState extends ConsumerState<CastScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CastHeader extends StatelessWidget {
+  const _CastHeader({required this.canCast, required this.colors});
+
+  final bool canCast;
+  final SvibeColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.elevated,
+        border: Border.all(color: colors.border),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            decoration: BoxDecoration(
+              color: canCast
+                  ? colors.orange
+                  : colors.muted.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+              border: Border.all(color: theme.colorScheme.onSurface, width: 2),
+            ),
+            child: Icon(
+              canCast ? Icons.near_me : Icons.lock_outline,
+              color: canCast ? Colors.black : theme.colorScheme.onSurface,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  canCast ? 'Cast a signal' : 'Signal locked',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  canCast
+                      ? 'Record up to 30 seconds, then throw it into discovery.'
+                      : 'Find and unlock a Golden Voice to speak again.',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -348,24 +409,31 @@ class _RecordPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(
-          color: isRecording
-              ? theme.colorScheme.primary
-              : theme.colorScheme.outline,
-        ),
-        borderRadius: BorderRadius.circular(10),
+        color: colors.elevated,
+        border: Border.all(color: isRecording ? colors.berry : colors.border),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
         children: [
-          Icon(
-            isRecording ? Icons.fiber_manual_record : Icons.mic,
-            color: theme.colorScheme.primary,
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: isRecording
+                  ? colors.berry.withValues(alpha: 0.16)
+                  : colors.blue.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isRecording ? Icons.fiber_manual_record : Icons.mic,
+              color: isRecording ? colors.berry : colors.blue,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               isRecording
@@ -376,7 +444,7 @@ class _RecordPanel extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
-          TextButton(
+          OutlinedButton(
             onPressed: enabled ? onToggle : null,
             child: Text(isRecording ? 'Stop' : 'Record'),
           ),
@@ -404,20 +472,29 @@ class _AudioPickerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(10),
+        color: colors.elevated,
+        border: Border.all(color: colors.border),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.audio_file, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: colors.lilac.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.audio_file, color: colors.lilac),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   file?.name ?? 'Or choose an audio file',
@@ -426,7 +503,7 @@ class _AudioPickerPanel extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
-              TextButton(
+              OutlinedButton(
                 onPressed: enabled ? onPick : null,
                 child: const Text('Choose'),
               ),
@@ -438,6 +515,8 @@ class _AudioPickerPanel extends StatelessWidget {
               const Text('Duration'),
               Expanded(
                 child: Slider(
+                  activeColor: colors.berry,
+                  inactiveColor: colors.border,
                   value: duration.toDouble(),
                   min: 1,
                   max: 30,
@@ -469,67 +548,165 @@ class _CastPad extends StatelessWidget {
     required this.pull,
     required this.isArmed,
     required this.isUploading,
+    required this.canCast,
+    required this.isEnabled,
+    required this.onCast,
   });
 
   final double pull;
   final bool isArmed;
   final bool isUploading;
+  final bool canCast;
+  final bool isEnabled;
+  final VoidCallback onCast;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    final progress = (pull / 160).clamp(0.0, 1.0);
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(10),
+        color: colors.elevated,
+        border: Border.all(color: colors.border),
+        borderRadius: BorderRadius.circular(32),
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _CastTrajectoryPainter(
+                color: canCast
+                    ? colors.orange.withValues(alpha: 0.45)
+                    : colors.border,
+                progress: progress,
+              ),
+            ),
+          ),
           Transform.translate(
             offset: Offset(0, -pull),
             child: Container(
-              width: 150,
-              height: 150,
+              width: 142,
+              height: 142,
               decoration: BoxDecoration(
-                color: isArmed
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.surface,
+                color: isArmed ? colors.orange : theme.colorScheme.surface,
                 shape: BoxShape.circle,
-                border: Border.all(color: theme.colorScheme.primary, width: 2),
+                border: Border.all(
+                  color: isArmed ? Colors.black : colors.orange,
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.orange.withValues(
+                      alpha: isArmed ? 0.35 : 0.16,
+                    ),
+                    blurRadius: isArmed ? 30 : 18,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
               ),
               child: Icon(
-                isUploading ? Icons.cloud_upload : Icons.graphic_eq,
-                size: 58,
-                color: isArmed ? Colors.black : theme.colorScheme.primary,
+                isUploading ? Icons.cloud_upload : Icons.near_me,
+                size: 56,
+                color: isArmed ? Colors.black : colors.orange,
               ),
             ),
           ),
           Positioned(
-            bottom: 28,
+            bottom: 26,
             left: 22,
             right: 22,
             child: Column(
               children: [
-                LinearProgressIndicator(
-                  minHeight: 8,
-                  value: isUploading ? null : pull / 160,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 9,
+                    value: isUploading ? null : progress,
+                    color: colors.orange,
+                    backgroundColor: colors.border,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  isUploading
-                      ? 'Casting...'
+                  !canCast
+                      ? 'Locked'
+                      : isUploading
+                      ? 'Casting'
                       : isArmed
-                      ? 'Release to cast'
-                      : 'Pull up, throw, or flick the phone',
+                      ? 'Release'
+                      : 'Pull up or flick',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  'Button fallback stays ready.',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
+            ),
+          ),
+          Positioned(
+            right: 18,
+            top: 18,
+            child: FilledButton.tonal(
+              onPressed: isEnabled && !isUploading ? onCast : null,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                backgroundColor: colors.blue.withValues(alpha: 0.14),
+                foregroundColor: colors.blue,
+              ),
+              child: const Icon(Icons.send, size: 18),
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _CastTrajectoryPainter extends CustomPainter {
+  const _CastTrajectoryPainter({required this.color, required this.progress});
+
+  final Color color;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 3;
+
+    final path = Path()
+      ..moveTo(size.width * 0.18, size.height * 0.72)
+      ..quadraticBezierTo(
+        size.width * 0.48,
+        size.height * (0.08 + 0.18 * (1 - progress)),
+        size.width * 0.82,
+        size.height * 0.34,
+      );
+    canvas.drawPath(path, paint);
+
+    final dotPaint = Paint()..color = color.withValues(alpha: 0.85);
+    for (final factor in const [0.24, 0.48, 0.72]) {
+      canvas.drawCircle(
+        Offset(size.width * factor, size.height * (0.78 - factor * 0.55)),
+        4,
+        dotPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CastTrajectoryPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.progress != progress;
   }
 }

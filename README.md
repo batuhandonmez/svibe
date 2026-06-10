@@ -44,6 +44,40 @@ flutter run --dart-define API_BASE_URL=http://127.0.0.1:8000
 Android emulator uses `http://10.0.2.2:8000` by default when
 `API_BASE_URL` is not supplied.
 
+## Local Web Demo
+
+Seed demo users, public discovery vibes, profile vibes, and DM content:
+
+```powershell
+backend\venv\Scripts\python.exe scripts\seed_demo.py
+```
+
+Build a web demo against the local API:
+
+```powershell
+cd mobile
+flutter build web --dart-define API_BASE_URL=http://127.0.0.1:8002 --output C:\svibe_web_demo
+```
+
+Serve the generated web build:
+
+```powershell
+cd C:\svibe_web_demo
+python -m http.server 8093
+```
+
+Demo login:
+
+```text
+demo_user / demo12345
+```
+
+Figma redesign file:
+
+```text
+https://www.figma.com/design/DRmbMcSTxxrcDvSLWM7ZG3/Svibe-Mobile-Redesign
+```
+
 ## Notes
 
 - Do not commit `backend/.env`.
@@ -52,3 +86,5 @@ Android emulator uses `http://10.0.2.2:8000` by default when
 - Windows desktop Flutter builds require a complete Visual Studio C++ toolchain.
 - Android builds in paths with non-ASCII characters may need
   `android.overridePathCheck=true`, already set in this project.
+- Supabase RLS is not applied yet. See `docs/SUPABASE_RLS_PLAN.md` before
+  exposing tables directly to a mobile/web Supabase client.
