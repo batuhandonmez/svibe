@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/svibe_models.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/theme_controller.dart';
 import '../auth/auth_controller.dart';
 import '../feed/feed_screen.dart';
 
@@ -47,6 +48,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = auth.user;
     final theme = Theme.of(context);
     final colors = theme.extension<SvibeColors>()!;
+    final themeMode = ref.watch(themeControllerProvider).mode;
     final displayName = user?.displayName?.isNotEmpty == true
         ? user!.displayName!
         : user?.username ?? 'Svibe';
@@ -124,8 +126,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               isPrivate: status.asData?.value?.isPrivate ?? false,
               messagePrivacy:
                   status.asData?.value?.messagePrivacy ?? 'everyone',
+              themeMode: themeMode,
               onPrivacyChanged: _setPrivacy,
               onDmChanged: _setDmPrivacy,
+              onThemeModeChanged: (value) =>
+                  ref.read(themeControllerProvider).setMode(value),
             ),
             const SizedBox(height: 26),
             Row(
@@ -389,14 +394,18 @@ class _SettingsPanel extends StatelessWidget {
   const _SettingsPanel({
     required this.isPrivate,
     required this.messagePrivacy,
+    required this.themeMode,
     required this.onPrivacyChanged,
     required this.onDmChanged,
+    required this.onThemeModeChanged,
   });
 
   final bool isPrivate;
   final String messagePrivacy;
+  final ThemeMode themeMode;
   final ValueChanged<bool> onPrivacyChanged;
   final ValueChanged<String> onDmChanged;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -439,6 +448,38 @@ class _SettingsPanel extends StatelessWidget {
             ],
             selected: {messagePrivacy},
             onSelectionChanged: (values) => onDmChanged(values.first),
+          ),
+          const Divider(height: 28),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Appearance',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                value: ThemeMode.system,
+                icon: Icon(Icons.phone_iphone, size: 18),
+                label: Text('System'),
+              ),
+              ButtonSegment(
+                value: ThemeMode.light,
+                icon: Icon(Icons.light_mode_outlined, size: 18),
+                label: Text('Light'),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                icon: Icon(Icons.dark_mode_outlined, size: 18),
+                label: Text('Dark'),
+              ),
+            ],
+            selected: {themeMode},
+            onSelectionChanged: (values) => onThemeModeChanged(values.first),
           ),
         ],
       ),
