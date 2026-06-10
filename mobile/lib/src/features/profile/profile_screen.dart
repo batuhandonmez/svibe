@@ -278,6 +278,7 @@ class _EditableHeroAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return InkWell(
       borderRadius: BorderRadius.circular(100),
       onTap: onTap,
@@ -285,11 +286,29 @@ class _EditableHeroAvatar extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Container(
+            width: 160,
+            height: 160,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: colors.blue.withValues(alpha: 0.22),
+                width: 12,
+              ),
+            ),
+          ),
+          Container(
             width: 132,
             height: 132,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.outline, width: 2),
+              border: Border.all(color: colors.lime, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: colors.lime.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
             ),
             child: ClipOval(
               child: bytes != null
@@ -308,8 +327,9 @@ class _EditableHeroAvatar extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
+                color: colors.berry,
                 shape: BoxShape.circle,
+                border: Border.all(color: theme.colorScheme.surface, width: 2),
               ),
               child: isUploading
                   ? const Padding(
@@ -357,13 +377,14 @@ class _ProfileMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          border: Border.all(color: theme.colorScheme.outline),
+          color: colors.elevated,
+          border: Border.all(color: colors.border),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
@@ -410,11 +431,12 @@ class _SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.colorScheme.outline),
+        color: colors.elevated,
+        border: Border.all(color: colors.border),
         borderRadius: BorderRadius.circular(26),
       ),
       child: Column(
@@ -499,8 +521,8 @@ class _VibeRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.colorScheme.outline),
+        color: colors.elevated,
+        border: Border.all(color: colors.border),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -525,7 +547,7 @@ class _VibeRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${vibe.duration}s · ${vibe.swipeRightCount} likes',
+                  '${vibe.duration}s - ${vibe.swipeRightCount} likes',
                   style: TextStyle(
                     color: theme.colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w700,

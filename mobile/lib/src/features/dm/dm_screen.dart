@@ -41,7 +41,7 @@ class _DmInbox extends ConsumerWidget {
     final token = auth.token;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Messages')),
+      appBar: AppBar(title: const Text('Signals')),
       body: token == null
           ? const Center(child: Text('Log in to see messages.'))
           : FutureBuilder<List<DmThread>>(
@@ -58,7 +58,7 @@ class _DmInbox extends ConsumerWidget {
                   return _EmptyDm(theme: theme);
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
                   itemCount: threads.length + 1,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
@@ -91,15 +91,16 @@ class _ThreadTile extends ConsumerWidget {
         ? thread.peer.displayName!
         : thread.peer.username;
     final preview = thread.lastMessage?.text ?? 'No messages yet';
+    final colors = theme.extension<SvibeColors>()!;
     return InkWell(
-      borderRadius: BorderRadius.circular(26),
+      borderRadius: BorderRadius.circular(30),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: colors.elevated,
           border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(30),
         ),
         child: Row(
           children: [
@@ -121,23 +122,18 @@ class _ThreadTile extends ConsumerWidget {
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
             ),
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: theme.extension<SvibeColors>()!.lime,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.arrow_forward,
-                color: Colors.black,
-                size: 18,
-              ),
+            SizedBox(
+              width: 62,
+              height: 38,
+              child: CustomPaint(painter: _DmWavePainter(color: colors.lime)),
             ),
           ],
         ),
@@ -217,6 +213,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
       ),
       body: Column(
         children: [
+          _ThreadSignalHeader(thread: widget.thread),
           Expanded(
             child: FutureBuilder<List<DmMessage>>(
               future: _messagesFuture,
@@ -236,7 +233,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                   );
                 }
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
@@ -257,7 +254,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                   child: TextField(
                     controller: _controller,
                     decoration: const InputDecoration(
-                      hintText: 'Write a quiet reply',
+                      hintText: 'Send a quiet signal',
                     ),
                     onSubmitted: (_) => _send(),
                   ),
@@ -270,7 +267,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                     padding: EdgeInsets.zero,
                     shape: const CircleBorder(),
                   ),
-                  child: const Icon(Icons.arrow_upward),
+                  child: const Icon(Icons.near_me),
                 ),
               ],
             ),
@@ -295,24 +292,102 @@ class _MessageBubble extends StatelessWidget {
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 300),
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: mine ? colors.berry : theme.colorScheme.surface,
+          color: mine ? colors.berry : colors.elevated,
           border: Border.all(color: theme.colorScheme.outline),
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(22),
-            topRight: const Radius.circular(22),
-            bottomLeft: Radius.circular(mine ? 22 : 6),
-            bottomRight: Radius.circular(mine ? 6 : 22),
+            topLeft: const Radius.circular(24),
+            topRight: const Radius.circular(24),
+            bottomLeft: Radius.circular(mine ? 24 : 8),
+            bottomRight: Radius.circular(mine ? 8 : 24),
           ),
         ),
-        child: Text(
-          message.text ?? 'Voice message',
-          style: TextStyle(
-            color: mine ? Colors.white : theme.colorScheme.onSurface,
-            fontWeight: FontWeight.w800,
-          ),
+        child: Column(
+          crossAxisAlignment: mine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 118,
+              height: 26,
+              child: CustomPaint(
+                painter: _DmWavePainter(
+                  color: mine ? Colors.white : colors.blue,
+                  dense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              message.text ?? 'Voice message',
+              style: TextStyle(
+                color: mine ? Colors.white : theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreadSignalHeader extends StatelessWidget {
+  const _ThreadSignalHeader({required this.thread});
+
+  final DmThread thread;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colors.lime.withValues(alpha: 0.13),
+          border: Border.all(color: colors.lime.withValues(alpha: 0.38)),
+          borderRadius: BorderRadius.circular(26),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: colors.lime,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black, width: 2),
+              ),
+              child: const Icon(Icons.graphic_eq, color: Colors.black),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Private signal',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Permission-aware, voice-first thread',
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -370,9 +445,30 @@ class _InboxHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Voice-first conversations shaped by profile permissions.',
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          Container(
+            height: 86,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.extension<SvibeColors>()!.elevated,
+              border: Border.all(color: theme.colorScheme.outline),
+              borderRadius: BorderRadius.circular(26),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: CustomPaint(
+                    painter: _DmWavePainter(
+                      color: theme.extension<SvibeColors>()!.blue,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Icon(
+                  Icons.lock_outline,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -427,5 +523,38 @@ class _DmError extends StatelessWidget {
         child: Text(message, textAlign: TextAlign.center),
       ),
     );
+  }
+}
+
+class _DmWavePainter extends CustomPainter {
+  const _DmWavePainter({required this.color, this.dense = false});
+
+  final Color color;
+  final bool dense;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = dense ? 3 : 4;
+    final bars = dense ? 14 : 18;
+    final center = size.height / 2;
+    for (var i = 0; i < bars; i++) {
+      final ratio = i / (bars - 1);
+      final wave = (0.35 + (i % 5) * 0.15).clamp(0.0, 1.0);
+      final h = size.height * (0.24 + wave * 0.58);
+      final x = ratio * size.width;
+      canvas.drawLine(
+        Offset(x, center - h / 2),
+        Offset(x, center + h / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DmWavePainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.dense != dense;
   }
 }
