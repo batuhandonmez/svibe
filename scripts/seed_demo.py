@@ -30,7 +30,7 @@ from models.vibe_swipe import VibeSwipe  # noqa: E402
 
 DEMO_PASSWORD = "demo12345"
 DEMO_USERS = [
-    ("demo_user", "Demo User", "Showing Svibe's voice-first flow.", False, "everyone"),
+    ("demo_user", "Demo User", "One-card discovery, private signals, cast-ready.", False, "everyone"),
     ("mira_wave", "Mira Wave", "Short city notes and night walks.", False, "everyone"),
     ("atlas_signal", "Atlas", "Tiny thoughts in short waves.", False, "everyone"),
     ("nova_signal", "Nova Signal", "Golden Voice hunter.", False, "followers"),

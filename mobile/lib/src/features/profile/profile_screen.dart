@@ -63,6 +63,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
+            tooltip: 'Edit profile',
+            onPressed: user == null ? null : () => _showEditProfile(user),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          IconButton(
             tooltip: 'Log out',
             onPressed: () => ref.read(authControllerProvider).logout(),
             icon: const Icon(Icons.logout),
@@ -116,10 +121,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               loading: () => const LinearProgressIndicator(),
             ),
             const SizedBox(height: 18),
-            OutlinedButton.icon(
-              onPressed: _pickAndUploadPhoto,
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: const Text('Change profile photo'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickAndUploadPhoto,
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text('Photo'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: user == null
+                        ? null
+                        : () => _showEditProfile(user),
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Profile'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 18),
             _SettingsPanel(
@@ -215,6 +236,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         .read(apiClientProvider)
         .updateMe(token, messagePrivacy: value);
     auth.replaceUser(updated);
+    ref.invalidate(userStatusProvider);
+  }
+
+  Future<void> _showEditProfile(UserProfile user) async {
+    final updated = await showModalBottomSheet<UserProfile>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => _EditProfileSheet(user: user),
+    );
+    if (updated == null || !mounted) {
+      return;
+    }
+    ref.read(authControllerProvider).replaceUser(updated);
     ref.invalidate(userStatusProvider);
   }
 
@@ -338,6 +374,148 @@ class _EditableHeroAvatar extends StatelessWidget {
                     )
                   : const Icon(Icons.camera_alt, color: Colors.white, size: 18),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  const _EditProfileSheet({required this.user});
+
+  final UserProfile user;
+
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late final TextEditingController _displayName;
+  late final TextEditingController _bio;
+  bool _isSaving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayName = TextEditingController(text: widget.user.displayName ?? '');
+    _bio = TextEditingController(text: widget.user.bio ?? '');
+  }
+
+  @override
+  void dispose() {
+    _displayName.dispose();
+    _bio.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null || _isSaving) {
+      return;
+    }
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
+    try {
+      final updated = await ref
+          .read(apiClientProvider)
+          .updateMe(
+            token,
+            displayName: _displayName.text.trim(),
+            bio: _bio.text.trim(),
+          );
+      if (mounted) {
+        Navigator.of(context).pop(updated);
+      }
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        setState(() => _error = exception.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 6, 20, 20 + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: colors.blue.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.badge_outlined, color: colors.blue),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Edit profile',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _displayName,
+            textInputAction: TextInputAction.next,
+            maxLength: 40,
+            decoration: const InputDecoration(
+              labelText: 'Display name',
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _bio,
+            minLines: 3,
+            maxLines: 4,
+            maxLength: 140,
+            decoration: const InputDecoration(
+              labelText: 'Bio',
+              prefixIcon: Icon(Icons.notes_outlined),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: theme.colorScheme.error,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _isSaving ? null : _save,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.check),
+            label: Text(_isSaving ? 'Saving' : 'Save profile'),
           ),
         ],
       ),
