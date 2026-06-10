@@ -32,7 +32,7 @@ DEMO_PASSWORD = "demo12345"
 DEMO_USERS = [
     ("demo_user", "Demo User", "Showing Svibe's voice-first flow.", False, "everyone"),
     ("mira_wave", "Mira Wave", "Short city notes and night walks.", False, "everyone"),
-    ("atlas_signal", "Atlas", "Tiny thoughts, no rooms.", False, "everyone"),
+    ("atlas_signal", "Atlas", "Tiny thoughts in short waves.", False, "everyone"),
     ("nova_signal", "Nova Signal", "Golden Voice hunter.", False, "followers"),
     ("echo_deniz", "Echo Deniz", "Morning notes and street sounds.", False, "everyone"),
 ]
