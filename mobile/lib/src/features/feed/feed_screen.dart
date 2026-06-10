@@ -231,7 +231,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'Swipe or use the two signals below.',
+                'One voice at a time.',
                 style: TextStyle(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 12,
@@ -337,7 +337,7 @@ class _StatusRail extends StatelessWidget {
   }
 }
 
-class _DiscoveryCard extends StatelessWidget {
+class _DiscoveryCard extends StatefulWidget {
   const _DiscoveryCard({
     required this.item,
     required this.player,
@@ -359,111 +359,190 @@ class _DiscoveryCard extends StatelessWidget {
   final VoidCallback onTogglePlayback;
 
   @override
+  State<_DiscoveryCard> createState() => _DiscoveryCardState();
+}
+
+class _DiscoveryCardState extends State<_DiscoveryCard> {
+  Offset _drag = Offset.zero;
+
+  VibeFeedItem get item => widget.item;
+  AudioPlayer get player => widget.player;
+  Animation<double> get waveController => widget.waveController;
+  bool get isLocked => widget.isLocked;
+  VoidCallback get onLike => widget.onLike;
+  VoidCallback get onDislike => widget.onDislike;
+  VoidCallback get onOpenProfile => widget.onOpenProfile;
+  VoidCallback get onTogglePlayback => widget.onTogglePlayback;
+
+  void _resetDrag() {
+    if (mounted) {
+      setState(() => _drag = Offset.zero);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<SvibeColors>()!;
     final name = item.displayName?.isNotEmpty == true
         ? item.displayName!
         : item.username;
+    final stamp = _drag.dx > 32
+        ? _SwipeStampKind.like
+        : _drag.dx < -32
+        ? _SwipeStampKind.pass
+        : null;
+    final rotation = (_drag.dx / 900).clamp(-0.10, 0.10);
     return GestureDetector(
       onTap: onOpenProfile,
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity > 180) {
+      onPanUpdate: isLocked
+          ? null
+          : (details) {
+              setState(() {
+                _drag = Offset(
+                  (_drag.dx + details.delta.dx).clamp(-130.0, 130.0),
+                  (_drag.dy + details.delta.dy).clamp(-70.0, 70.0),
+                );
+              });
+            },
+      onPanCancel: _resetDrag,
+      onPanEnd: (details) {
+        final velocity = details.velocity.pixelsPerSecond;
+        if (_drag.dx > 88 || velocity.dx > 360) {
+          _resetDrag();
           onLike();
-        } else if (velocity < -180) {
+        } else if (_drag.dx < -88 || velocity.dx < -360) {
+          _resetDrag();
           onDislike();
-        }
-      },
-      onVerticalDragEnd: (details) {
-        if ((details.primaryVelocity ?? 0) < -180) {
+        } else if (!isLocked && (_drag.dy < -52 || velocity.dy < -300)) {
+          _resetDrag();
           onOpenProfile();
+        } else {
+          _resetDrag();
         }
       },
       child: Column(
         children: [
           Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                border: Border.all(color: theme.colorScheme.outline),
-                borderRadius: BorderRadius.circular(34),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              transform: Matrix4.identity()
+                ..translate(_drag.dx, _drag.dy)
+                ..rotateZ(rotation),
+              child: Stack(
                 children: [
-                  Row(
-                    children: [
-                      ProfileAvatar(
-                        username: item.username,
-                        imageUrl: item.profilePictureUrl,
-                        radius: 28,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      border: Border.all(color: theme.colorScheme.outline),
+                      borderRadius: BorderRadius.circular(34),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: theme.brightness == Brightness.dark
+                                ? 0.24
+                                : 0.08,
+                          ),
+                          blurRadius: 26,
+                          offset: const Offset(0, 16),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w900,
+                            ProfileAvatar(
+                              username: item.username,
+                              imageUrl: item.profilePictureUrl,
+                              radius: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Text(
+                                    '@${item.username} - ${item.duration}s',
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            Text(
-                              '@${item.username} · ${item.duration}s',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            if (item.isGoldenVoice)
+                              _GoldenChip(color: colors.orange),
                           ],
                         ),
-                      ),
-                      if (item.isGoldenVoice) _GoldenChip(color: colors.orange),
-                    ],
-                  ),
-                  const Spacer(),
-                  StreamBuilder<PlayerState>(
-                    stream: player.playerStateStream,
-                    builder: (context, snapshot) {
-                      final playing = snapshot.data?.playing ?? player.playing;
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(180),
-                        onTap: onTogglePlayback,
-                        child: _WaveStage(
-                          controller: waveController,
-                          active: playing,
-                          golden: item.isGoldenVoice,
+                        const Spacer(),
+                        StreamBuilder<PlayerState>(
+                          stream: player.playerStateStream,
+                          builder: (context, snapshot) {
+                            final playing =
+                                snapshot.data?.playing ?? player.playing;
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(180),
+                              onTap: onTogglePlayback,
+                              child: _WaveStage(
+                                controller: waveController,
+                                active: playing,
+                                golden: item.isGoldenVoice,
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                  const Spacer(),
-                  Text(
-                    isLocked ? 'Listen first' : 'Choose the signal',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
+                        const Spacer(),
+                        Text(
+                          isLocked ? 'Signal opening' : 'Signal open',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isLocked
+                              ? 'The first three seconds are for listening.'
+                              : item.isGoldenVoice
+                              ? 'Golden Voice is awake.'
+                              : 'Ready for your read.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        _ListenGate(player: player, isLocked: isLocked),
+                        const SizedBox(height: 12),
+                        _ProgressBar(player: player),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isLocked
-                        ? 'Actions unlock after 3 seconds.'
-                        : 'Pass left, like right, swipe up for profile.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
+                  if (stamp != null)
+                    Positioned(
+                      top: 92,
+                      left: stamp == _SwipeStampKind.pass ? 24 : null,
+                      right: stamp == _SwipeStampKind.like ? 24 : null,
+                      child: _SwipeStamp(
+                        kind: stamp,
+                        opacity: (_drag.dx.abs() / 120).clamp(0.0, 1.0),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  _ProgressBar(player: player),
                 ],
               ),
             ),
@@ -492,6 +571,101 @@ class _DiscoveryCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+enum _SwipeStampKind { like, pass }
+
+class _SwipeStamp extends StatelessWidget {
+  const _SwipeStamp({required this.kind, required this.opacity});
+
+  final _SwipeStampKind kind;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<SvibeColors>()!;
+    final isLike = kind == _SwipeStampKind.like;
+    final color = isLike
+        ? colors.berry
+        : Theme.of(context).colorScheme.onSurface;
+    return Opacity(
+      opacity: opacity,
+      child: Transform.rotate(
+        angle: isLike ? -0.16 : 0.16,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: isLike
+                ? colors.berry.withValues(alpha: 0.14)
+                : Theme.of(context).colorScheme.surface,
+            border: Border.all(color: color, width: 2),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Text(
+            isLike ? 'LIKE' : 'PASS',
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ListenGate extends StatelessWidget {
+  const _ListenGate({required this.player, required this.isLocked});
+
+  final AudioPlayer player;
+  final bool isLocked;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    return StreamBuilder<Duration>(
+      stream: player.positionStream,
+      builder: (context, snapshot) {
+        final seconds = snapshot.data?.inMilliseconds ?? 0;
+        final progress = (seconds / 3000).clamp(0.0, 1.0);
+        return Column(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: isLocked ? progress : 1,
+                minHeight: 8,
+                color: isLocked ? colors.lilac : colors.lime,
+                backgroundColor: theme.colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isLocked ? Icons.hearing : Icons.bolt,
+                  size: 16,
+                  color: isLocked ? colors.lilac : colors.lime,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isLocked ? 'listening gate' : 'choice unlocked',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -824,26 +998,90 @@ class _GoldenVoiceSheetState extends State<_GoldenVoiceSheet> {
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 22),
-          Container(
-            height: 170,
-            decoration: BoxDecoration(
-              color: colors.orange,
-              borderRadius: BorderRadius.circular(34),
-            ),
-            child: Center(
-              child: Icon(Icons.vibration, size: 70, color: AppTheme.ink),
-            ),
-          ),
+          _GoldenRitualCard(color: colors.orange),
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: _isUnlocking ? null : _unlock,
             icon: const Icon(Icons.graphic_eq),
-            label: Text(_isUnlocking ? 'Unlocking...' : 'Use fallback unlock'),
+            label: Text(_isUnlocking ? 'Unlocking...' : 'Unlock manually'),
           ),
         ],
       ),
     );
   }
+}
+
+class _GoldenRitualCard extends StatelessWidget {
+  const _GoldenRitualCard({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 184,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(34),
+        border: Border.all(color: Colors.black, width: 2),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(child: CustomPaint(painter: _GoldenRitualPainter())),
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: AppTheme.ink,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: Icon(Icons.vibration, size: 46, color: color),
+          ),
+          Positioned(
+            right: 24,
+            top: 24,
+            child: Icon(Icons.auto_awesome, color: AppTheme.ink),
+          ),
+          Positioned(
+            left: 24,
+            bottom: 24,
+            child: Icon(Icons.auto_awesome, color: AppTheme.ink),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoldenRitualPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppTheme.ink.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < 4; i++) {
+      final inset = 18.0 + i * 22;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            inset,
+            inset * .55,
+            size.width - inset * 2,
+            size.height - inset * 1.1,
+          ),
+          const Radius.circular(38),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GoldenRitualPainter oldDelegate) => false;
 }
 
 class _ProfilePreview extends StatelessWidget {
