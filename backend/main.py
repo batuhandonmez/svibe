@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.database import Base, engine
 from core.migrations import apply_lightweight_migrations
+from core.rate_limit import RateLimitMiddleware
 from models import DmMessage, DmThread, Follow, User, Vibe, VibeListen, VibeSwipe  # noqa: F401
 from routers.auth import router as auth_router
 from routers.dm import router as dm_router
@@ -38,6 +39,14 @@ if settings.cors_allow_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+app.add_middleware(
+    RateLimitMiddleware,
+    enabled=settings.RATE_LIMIT_ENABLED,
+    auth_limit=settings.AUTH_RATE_LIMIT_PER_WINDOW,
+    write_limit=settings.WRITE_RATE_LIMIT_PER_WINDOW,
+    window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+)
 
 app.include_router(health_router)
 app.include_router(auth_router)

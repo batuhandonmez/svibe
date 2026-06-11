@@ -46,5 +46,5 @@
 ## Faz 5: Guvenlik ve Yayina Hazirlik
 - [ ] AWS access key rotate edilecek ve yerel `.env` tekrar guncellenecek.
 - [ ] Production icin IAM Role/secret yonetimi planlanacak.
-- [ ] Rate limit ve abuse korumalari eklenecek.
+- [x] Temel rate limit ve abuse korumasi eklendi.
 - [ ] Gercek cihazla uc uca test yapilacak.

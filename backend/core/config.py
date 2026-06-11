@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "svibe-dev-change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    AUTH_RATE_LIMIT_PER_WINDOW: int = 30
+    WRITE_RATE_LIMIT_PER_WINDOW: int = 120
 
     @property
     def cors_allow_origins(self) -> list[str]:
