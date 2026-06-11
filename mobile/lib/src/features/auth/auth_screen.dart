@@ -115,6 +115,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         TextField(
                           controller: _username,
                           textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.username],
                           decoration: const InputDecoration(
                             labelText: 'Username',
                             prefixIcon: Icon(Icons.alternate_email),
@@ -124,6 +125,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         TextField(
                           controller: _password,
                           obscureText: true,
+                          autofillHints: const [AutofillHints.password],
                           decoration: const InputDecoration(
                             labelText: 'Password',
                             prefixIcon: Icon(Icons.lock_outline),
@@ -195,11 +197,17 @@ class _BrandLockup extends StatelessWidget {
           width: 54,
           height: 54,
           decoration: BoxDecoration(
-            color: colors.lime,
-            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-            border: Border.all(color: Colors.black, width: 2),
+            color: colors.berry,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: colors.berry.withValues(alpha: 0.24),
+                blurRadius: 22,
+                offset: const Offset(0, 12),
+              ),
+            ],
           ),
-          child: const Icon(Icons.graphic_eq, color: Colors.black, size: 28),
+          child: const Icon(Icons.graphic_eq, color: Colors.white, size: 28),
         ),
         const SizedBox(width: 14),
         Text(
@@ -244,7 +252,7 @@ class _AuthModeButton extends StatelessWidget {
             color: selected
                 ? theme.colorScheme.surface
                 : theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
@@ -263,19 +271,19 @@ class _DemoHint extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: colors.lime.withValues(alpha: 0.14),
-        border: Border.all(color: colors.lime.withValues(alpha: 0.44)),
+        color: colors.elevated,
+        border: Border.all(color: colors.border),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
-          Icon(Icons.key_outlined, color: colors.lime),
+          Icon(Icons.key_outlined, color: colors.berry),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Demo: demo_user / demo12345',
               style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),

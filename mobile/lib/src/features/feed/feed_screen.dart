@@ -261,16 +261,14 @@ class _CastButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
     return IconButton.filled(
       tooltip: 'Cast',
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: colors.orange,
-        foregroundColor: Colors.black,
+        backgroundColor: theme.colorScheme.onSurface,
+        foregroundColor: theme.colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.controlRadius),
-          side: BorderSide(color: theme.colorScheme.onSurface, width: 1.5),
         ),
       ),
       icon: const Icon(Icons.near_me),
@@ -340,12 +338,12 @@ class _StatusRail extends StatelessWidget {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: canUpload ? colors.lime : colors.lilac,
+              color: canUpload ? colors.berry : colors.lilac,
               shape: BoxShape.circle,
             ),
             child: Icon(
               canUpload ? Icons.graphic_eq : Icons.hearing,
-              color: Colors.black,
+              color: Colors.white,
               size: 17,
             ),
           ),
@@ -475,11 +473,11 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                         BoxShadow(
                           color: Colors.black.withValues(
                             alpha: theme.brightness == Brightness.dark
-                                ? 0.24
-                                : 0.08,
+                                ? 0.28
+                                : 0.10,
                           ),
-                          blurRadius: 26,
-                          offset: const Offset(0, 16),
+                          blurRadius: 34,
+                          offset: const Offset(0, 22),
                         ),
                       ],
                     ),
@@ -517,7 +515,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                               ),
                             ),
                             if (item.isGoldenVoice)
-                              _GoldenChip(color: colors.orange),
+                              _GoldenChip(color: colors.lime),
                           ],
                         ),
                         const Spacer(),
@@ -548,10 +546,10 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                         const SizedBox(height: 8),
                         Text(
                           isLocked
-                              ? 'The first three seconds are for listening.'
+                              ? 'First three seconds: listen before choosing.'
                               : item.isGoldenVoice
                               ? 'Golden Voice is awake.'
-                              : 'Ready for your read.',
+                              : 'Swipe when it lands.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
@@ -595,7 +593,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
               _SignalButton(
                 icon: Icons.favorite,
                 enabled: !isLocked,
-                color: colors.berry,
+                color: theme.colorScheme.onSurface,
                 foreground: Colors.white,
                 onTap: onLike,
               ),
@@ -671,7 +669,7 @@ class _ListenGate extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: isLocked ? progress : 1,
                 minHeight: 8,
-                color: isLocked ? colors.lilac : colors.lime,
+                color: isLocked ? colors.lilac : colors.berry,
                 backgroundColor: theme.colorScheme.outline,
               ),
             ),
@@ -682,7 +680,7 @@ class _ListenGate extends StatelessWidget {
                 Icon(
                   isLocked ? Icons.hearing : Icons.bolt,
                   size: 16,
-                  color: isLocked ? colors.lilac : colors.lime,
+                  color: isLocked ? colors.lilac : colors.berry,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -712,13 +710,14 @@ class _GoldenChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color,
+        color: color.withValues(alpha: 0.14),
+        border: Border.all(color: color.withValues(alpha: 0.42)),
         borderRadius: BorderRadius.circular(99),
       ),
       child: const Text(
         'GOLD',
         style: TextStyle(
-          color: Colors.black,
+          color: Color(0xFF151316),
           fontSize: 11,
           fontWeight: FontWeight.w900,
         ),
@@ -894,7 +893,7 @@ class ProfileAvatar extends StatelessWidget {
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: Theme.of(context).extension<SvibeColors>()!.lilac,
+      backgroundColor: Theme.of(context).extension<SvibeColors>()!.blue,
       child: Text(
         initial,
         style: TextStyle(

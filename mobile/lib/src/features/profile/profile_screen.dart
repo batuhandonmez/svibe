@@ -169,13 +169,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.orange,
+                    color: colors.elevated,
+                    border: Border.all(color: colors.border),
                     borderRadius: BorderRadius.circular(99),
                   ),
-                  child: const Text(
+                  child: Text(
                     'public signal',
                     style: TextStyle(
-                      color: Colors.black,
+                      color: theme.colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w900,
                       fontSize: 11,
                     ),
@@ -326,10 +327,7 @@ class _EditableHeroAvatar extends StatelessWidget {
             height: 160,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(
-                color: colors.blue.withValues(alpha: 0.22),
-                width: 12,
-              ),
+              border: Border.all(color: colors.border, width: 10),
             ),
           ),
           Container(
@@ -337,12 +335,14 @@ class _EditableHeroAvatar extends StatelessWidget {
             height: 132,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: colors.orange, width: 3),
+              border: Border.all(color: theme.colorScheme.surface, width: 4),
               boxShadow: [
                 BoxShadow(
-                  color: colors.orange.withValues(alpha: 0.16),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
+                  color: Colors.black.withValues(
+                    alpha: theme.brightness == Brightness.dark ? 0.34 : 0.14,
+                  ),
+                  blurRadius: 30,
+                  offset: const Offset(0, 18),
                 ),
               ],
             ),
@@ -363,7 +363,7 @@ class _EditableHeroAvatar extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: colors.blue,
+                color: colors.berry,
                 shape: BoxShape.circle,
                 border: Border.all(color: theme.colorScheme.surface, width: 2),
               ),
@@ -458,10 +458,10 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: colors.blue.withValues(alpha: 0.16),
+                  color: colors.berry.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.badge_outlined, color: colors.blue),
+                child: Icon(Icons.badge_outlined, color: colors.berry),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -570,7 +570,7 @@ class _ProfileMetric extends StatelessWidget {
             Text(
               value,
               style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 2),
@@ -613,7 +613,7 @@ class _SettingsPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: colors.elevated,
+        color: theme.colorScheme.surface,
         border: Border.all(color: colors.border),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
@@ -710,7 +710,7 @@ class _VibeRow extends StatelessWidget {
             height: 46,
             child: CustomPaint(
               painter: _MiniWavePainter(
-                color: vibe.isGoldenVoice ? colors.orange : colors.blue,
+                color: vibe.isGoldenVoice ? colors.lime : colors.berry,
               ),
             ),
           ),
@@ -736,7 +736,7 @@ class _VibeRow extends StatelessWidget {
           ),
           Icon(
             vibe.isGoldenVoice ? Icons.auto_awesome : Icons.favorite,
-            color: vibe.isGoldenVoice ? colors.orange : colors.blue,
+            color: vibe.isGoldenVoice ? colors.lime : colors.berry,
           ),
         ],
       ),

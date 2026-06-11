@@ -141,7 +141,7 @@ class _ThreadTile extends ConsumerWidget {
             SizedBox(
               width: 62,
               height: 38,
-              child: CustomPaint(painter: _DmWavePainter(color: colors.orange)),
+              child: CustomPaint(painter: _DmWavePainter(color: colors.berry)),
             ),
           ],
         ),
@@ -509,8 +509,10 @@ class _MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: mine ? colors.blue : colors.elevated,
-          border: Border.all(color: theme.colorScheme.outline),
+          color: mine ? theme.colorScheme.onSurface : colors.elevated,
+          border: Border.all(
+            color: mine ? Colors.transparent : theme.colorScheme.outline,
+          ),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(24),
             topRight: const Radius.circular(24),
@@ -528,7 +530,7 @@ class _MessageBubble extends StatelessWidget {
               height: 26,
               child: CustomPaint(
                 painter: _DmWavePainter(
-                  color: mine ? Colors.white : colors.blue,
+                  color: mine ? Colors.white : colors.berry,
                   dense: true,
                 ),
               ),
@@ -543,7 +545,7 @@ class _MessageBubble extends StatelessWidget {
                   children: [
                     Icon(
                       playing ? Icons.pause : Icons.play_arrow,
-                      color: mine ? Colors.white : colors.blue,
+                      color: mine ? Colors.white : colors.berry,
                       size: 20,
                     ),
                     const SizedBox(width: 6),
@@ -582,14 +584,13 @@ class _ThreadSignalHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: colors.orange.withValues(alpha: 0.13),
-          border: Border.all(color: colors.orange.withValues(alpha: 0.38)),
+          color: theme.colorScheme.surface,
+          border: Border.all(color: theme.colorScheme.outline),
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         ),
         child: Row(
@@ -598,11 +599,10 @@ class _ThreadSignalHeader extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: colors.orange,
+                color: theme.colorScheme.onSurface,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.black, width: 2),
               ),
-              child: const Icon(Icons.graphic_eq, color: Colors.black),
+              child: Icon(Icons.graphic_eq, color: theme.colorScheme.surface),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -654,7 +654,7 @@ class _DmAvatar extends StatelessWidget {
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: Theme.of(context).extension<SvibeColors>()!.blue,
+      backgroundColor: Theme.of(context).extension<SvibeColors>()!.berry,
       child: Text(
         initial,
         style: const TextStyle(
@@ -698,7 +698,7 @@ class _InboxHeader extends StatelessWidget {
                 Expanded(
                   child: CustomPaint(
                     painter: _DmWavePainter(
-                      color: theme.extension<SvibeColors>()!.orange,
+                      color: theme.extension<SvibeColors>()!.berry,
                     ),
                   ),
                 ),
