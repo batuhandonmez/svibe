@@ -23,6 +23,7 @@ Bu rapor, projenin su anki durumunu sade dille anlatir.
 - DM thread ve mesaj endpointleri var.
 - Voice DM icin backend audio upload endpointi ve Flutter temel kayit/dosya
   fallback akisi eklendi.
+- Voice DM mesajlari icin temel oynatma butonu eklendi.
 - Demo kullanici, demo sesler ve demo DM threadleri seed ediliyor.
 
 ## Tasarim Durumu
@@ -103,6 +104,5 @@ Demo smoke check:
 - AWS access key rotate etmek; anahtar gecmiste chat icinde paylasildi.
 - Gercek cihazda mikrofon, motion sensor, Cast ve Shake rituelini uc uca test
   etmek.
-- DM voice mesajlarina oynatma UI'i eklemek.
 - Feed kartini Figma limiti acilinca Figma dosyasina tasimak.
 - Realtime DM veya polling yenilemesini urun ihtiyacina gore secmek.
