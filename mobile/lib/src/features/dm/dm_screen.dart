@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -162,9 +163,12 @@ class _DmThreadView extends ConsumerStatefulWidget {
 class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   final _controller = TextEditingController();
   final _recorder = AudioRecorder();
+  final _audioPlayer = AudioPlayer();
   late Future<List<DmMessage>> _messagesFuture;
+  StreamSubscription<ProcessingState>? _audioStateSubscription;
   bool _isSendingAudio = false;
   bool _isRecording = false;
+  String? _playingMessageId;
   int _recordSeconds = 0;
   Timer? _recordTimer;
 
@@ -172,12 +176,21 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   void initState() {
     super.initState();
     _messagesFuture = _loadMessages();
+    _audioStateSubscription = _audioPlayer.processingStateStream.listen((
+      state,
+    ) {
+      if (state == ProcessingState.completed && mounted) {
+        setState(() => _playingMessageId = null);
+      }
+    });
   }
 
   @override
   void dispose() {
     _recordTimer?.cancel();
+    _audioStateSubscription?.cancel();
     _recorder.dispose();
+    _audioPlayer.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -340,6 +353,33 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _toggleAudioPlayback(DmMessage message) async {
+    final audioUrl = message.audioUrl;
+    if (audioUrl == null || audioUrl.isEmpty) {
+      return;
+    }
+    try {
+      if (_playingMessageId == message.id && _audioPlayer.playing) {
+        await _audioPlayer.pause();
+        if (mounted) {
+          setState(() => _playingMessageId = null);
+        }
+        return;
+      }
+      await _audioPlayer.stop();
+      await _audioPlayer.setUrl(audioUrl);
+      if (mounted) {
+        setState(() => _playingMessageId = message.id);
+      }
+      await _audioPlayer.play();
+    } on PlayerException {
+      if (mounted) {
+        _show('Voice DM could not be played.');
+        setState(() => _playingMessageId = null);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
@@ -391,6 +431,8 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                     return _MessageBubble(
                       message: message,
                       mine: message.senderId == auth.user?.id,
+                      playing: _playingMessageId == message.id,
+                      onPlayAudio: () => _toggleAudioPlayback(message),
                     );
                   },
                 );
@@ -444,10 +486,17 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.mine});
+  const _MessageBubble({
+    required this.message,
+    required this.mine,
+    required this.playing,
+    required this.onPlayAudio,
+  });
 
   final DmMessage message;
   final bool mine;
+  final bool playing;
+  final VoidCallback onPlayAudio;
 
   @override
   Widget build(BuildContext context) {
@@ -485,13 +534,39 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 7),
-            Text(
-              message.text ?? 'Voice message',
-              style: TextStyle(
-                color: mine ? Colors.white : theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w800,
+            if (message.audioUrl != null)
+              InkWell(
+                borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                onTap: onPlayAudio,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      playing ? Icons.pause : Icons.play_arrow,
+                      color: mine ? Colors.white : colors.blue,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      playing ? 'Playing voice' : 'Play voice',
+                      style: TextStyle(
+                        color: mine
+                            ? Colors.white
+                            : theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Text(
+                message.text ?? '',
+                style: TextStyle(
+                  color: mine ? Colors.white : theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
           ],
         ),
       ),
