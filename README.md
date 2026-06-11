@@ -72,6 +72,9 @@ Demo login:
 demo_user / demo12345
 ```
 
+In the web/mobile login screen, the demo credential card fills and submits this
+account with one tap after `scripts\seed_demo.py` has been run.
+
 Figma redesign file:
 
 ```text

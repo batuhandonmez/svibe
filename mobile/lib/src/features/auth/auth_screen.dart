@@ -161,7 +161,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  _DemoHint(colors: colors),
+                  _DemoHint(
+                    colors: colors,
+                    enabled: !auth.isLoading,
+                    onTap: _loginDemo,
+                  ),
                 ],
               ),
             ),
@@ -180,6 +184,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     } else {
       await auth.login(username, password);
     }
+  }
+
+  Future<void> _loginDemo() async {
+    if (ref.read(authControllerProvider).isLoading) {
+      return;
+    }
+    setState(() {
+      _isRegister = false;
+      _username.text = 'demo_user';
+      _password.text = 'demo12345';
+    });
+    await ref.read(authControllerProvider).login('demo_user', 'demo12345');
   }
 }
 
@@ -261,33 +277,52 @@ class _AuthModeButton extends StatelessWidget {
 }
 
 class _DemoHint extends StatelessWidget {
-  const _DemoHint({required this.colors});
+  const _DemoHint({
+    required this.colors,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final SvibeColors colors;
+  final bool enabled;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.elevated,
-        border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.key_outlined, color: colors.berry),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Demo: demo_user / demo12345',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      onTap: enabled ? onTap : null,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 160),
+        opacity: enabled ? 1 : .55,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: colors.elevated,
+            border: Border.all(color: colors.border),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           ),
-        ],
+          child: Row(
+            children: [
+              Icon(Icons.key_outlined, color: colors.berry),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Demo: demo_user / demo12345',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
