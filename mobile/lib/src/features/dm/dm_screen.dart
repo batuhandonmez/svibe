@@ -68,7 +68,7 @@ class _DmInbox extends ConsumerWidget {
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
                   itemCount: threads.length + 1,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     if (index == 0) {
                       return _InboxHeader(theme: theme);
@@ -104,11 +104,10 @@ class _ThreadTile extends ConsumerWidget {
       borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: colors.elevated,
-          border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          color: Colors.transparent,
+          border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
         ),
         child: Row(
           children: [
@@ -139,8 +138,8 @@ class _ThreadTile extends ConsumerWidget {
               ),
             ),
             SizedBox(
-              width: 62,
-              height: 38,
+              width: 54,
+              height: 32,
               child: CustomPaint(painter: _DmWavePainter(color: colors.berry)),
             ),
           ],
@@ -684,9 +683,9 @@ class _InboxHeader extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Container(
-            height: 86,
+            height: 74,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: theme.extension<SvibeColors>()!.elevated,

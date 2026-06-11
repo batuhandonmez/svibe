@@ -80,67 +80,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 110),
           children: [
-            Center(
-              child: _EditableHeroAvatar(
-                username: user?.username ?? 'Svibe',
-                imageUrl: user?.profilePictureUrl,
-                bytes: _photoBytes,
-                isUploading: _isUploadingPhoto,
-                onTap: _pickAndUploadPhoto,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              displayName,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '@${user?.username ?? 'svibe'}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              user?.bio?.isNotEmpty == true
-                  ? user!.bio!
-                  : 'Your public vibes enter discovery. Private mode keeps them close.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 22),
-            status.when(
-              data: (value) => _StatsRow(status: value),
-              error: (_, __) => const Text('Status unavailable'),
-              loading: () => const LinearProgressIndicator(),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickAndUploadPhoto,
-                    icon: const Icon(Icons.add_a_photo_outlined),
-                    label: const Text('Photo'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: user == null
-                        ? null
-                        : () => _showEditProfile(user),
-                    icon: const Icon(Icons.tune),
-                    label: const Text('Profile'),
-                  ),
-                ),
-              ],
+            _ProfileHeader(
+              username: user?.username ?? 'svibe',
+              displayName: displayName,
+              bio: user?.bio,
+              profilePictureUrl: user?.profilePictureUrl,
+              photoBytes: _photoBytes,
+              isUploadingPhoto: _isUploadingPhoto,
+              status: status.asData?.value,
+              onPhotoTap: _pickAndUploadPhoto,
+              onEditTap: user == null ? null : () => _showEditProfile(user),
             ),
             const SizedBox(height: 18),
             _SettingsPanel(
@@ -297,6 +246,101 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.username,
+    required this.displayName,
+    required this.onPhotoTap,
+    required this.isUploadingPhoto,
+    this.bio,
+    this.profilePictureUrl,
+    this.photoBytes,
+    this.status,
+    this.onEditTap,
+  });
+
+  final String username;
+  final String displayName;
+  final String? bio;
+  final String? profilePictureUrl;
+  final Uint8List? photoBytes;
+  final bool isUploadingPhoto;
+  final UserStatus? status;
+  final VoidCallback onPhotoTap;
+  final VoidCallback? onEditTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final resolvedBio = bio?.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _EditableHeroAvatar(
+              username: username,
+              imageUrl: profilePictureUrl,
+              bytes: photoBytes,
+              isUploading: isUploadingPhoto,
+              onTap: onPhotoTap,
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: _StatsRow(status: status)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          displayName,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w900,
+            height: 1.02,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '@$username',
+          style: TextStyle(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          resolvedBio?.isNotEmpty == true
+              ? resolvedBio!
+              : 'One-card discovery, private signals, cast-ready.',
+          style: TextStyle(
+            color: theme.colorScheme.onSurfaceVariant,
+            height: 1.32,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onPhotoTap,
+                icon: const Icon(Icons.add_a_photo_outlined),
+                label: const Text('Photo'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onEditTap,
+                icon: const Icon(Icons.tune),
+                label: const Text('Profile'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _EditableHeroAvatar extends StatelessWidget {
   const _EditableHeroAvatar({
     required this.username,
@@ -323,16 +367,16 @@ class _EditableHeroAvatar extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Container(
-            width: 160,
-            height: 160,
+            width: 112,
+            height: 112,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: colors.border, width: 10),
+              border: Border.all(color: colors.border, width: 8),
             ),
           ),
           Container(
-            width: 132,
-            height: 132,
+            width: 94,
+            height: 94,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: theme.colorScheme.surface, width: 4),
@@ -352,16 +396,16 @@ class _EditableHeroAvatar extends StatelessWidget {
                   : ProfileAvatar(
                       username: username,
                       imageUrl: imageUrl,
-                      radius: 66,
+                      radius: 47,
                     ),
             ),
           ),
           Positioned(
-            right: 3,
-            bottom: 6,
+            right: 0,
+            bottom: 2,
             child: Container(
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: colors.berry,
                 shape: BoxShape.circle,
@@ -369,10 +413,10 @@ class _EditableHeroAvatar extends StatelessWidget {
               ),
               child: isUploading
                   ? const Padding(
-                      padding: EdgeInsets.all(9),
+                      padding: EdgeInsets.all(8),
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                  : const Icon(Icons.camera_alt, color: Colors.white, size: 16),
             ),
           ),
         ],

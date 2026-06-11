@@ -195,7 +195,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(userStatusProvider);
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Svibe'),
@@ -235,15 +234,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                         onOpenProfile: _openProfileIntent,
                         onTogglePlayback: _togglePlayback,
                       ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Discovery signal active',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
               ),
             ],
           ),
@@ -537,10 +527,10 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                         ),
                         const Spacer(),
                         Text(
-                          isLocked ? 'Signal opening' : 'Signal open',
+                          isLocked ? 'Listen' : 'Choose',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -549,7 +539,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                               ? 'First three seconds: listen before choosing.'
                               : item.isGoldenVoice
                               ? 'Golden Voice is awake.'
-                              : 'Swipe when it lands.',
+                              : 'The voice is yours to read.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
