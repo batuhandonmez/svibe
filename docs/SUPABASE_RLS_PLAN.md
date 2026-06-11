@@ -14,7 +14,8 @@ Relevant docs:
 
 ## Current Risk
 
-The current Supabase advisor state reported RLS disabled on these public tables:
+The current Supabase advisor state, checked on 2026-06-11, reported RLS
+disabled on these public tables:
 
 - `public.users`
 - `public.vibes`
@@ -54,8 +55,8 @@ Supabase client access will be blocked until policies are correct.
    - `vibe_listens.vibe_id`
    - `follows.follower_id`
    - `follows.following_id`
-   - `dm_threads.participant_a_id`
-   - `dm_threads.participant_b_id`
+   - `dm_threads.user_low_id`
+   - `dm_threads.user_high_id`
    - `dm_messages.thread_id`
    - `dm_messages.sender_id`
 3. Create policies in a development branch or disposable project.
@@ -158,8 +159,8 @@ on public.dm_threads
 for select
 to authenticated
 using (
-  (select auth.uid()) = participant_a_id
-  or (select auth.uid()) = participant_b_id
+  (select auth.uid()) = user_low_id
+  or (select auth.uid()) = user_high_id
 );
 
 create policy "DM messages visible to thread participants"
@@ -172,8 +173,8 @@ using (
     from public.dm_threads t
     where t.id = dm_messages.thread_id
       and (
-        (select auth.uid()) = t.participant_a_id
-        or (select auth.uid()) = t.participant_b_id
+        (select auth.uid()) = t.user_low_id
+        or (select auth.uid()) = t.user_high_id
       )
   )
 );
@@ -189,8 +190,8 @@ with check (
     from public.dm_threads t
     where t.id = dm_messages.thread_id
       and (
-        (select auth.uid()) = t.participant_a_id
-        or (select auth.uid()) = t.participant_b_id
+        (select auth.uid()) = t.user_low_id
+        or (select auth.uid()) = t.user_high_id
       )
   )
 );

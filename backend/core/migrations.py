@@ -51,3 +51,48 @@ def apply_lightweight_migrations(engine: Engine) -> None:
                     "VARCHAR(20) NOT NULL DEFAULT 'everyone'"
                 )
             )
+
+        _apply_security_indexes(connection, table_names)
+
+
+def _apply_security_indexes(connection, table_names: list[str]) -> None:
+    """Create stable indexes used by discovery, privacy, DM, and future RLS."""
+    index_sql = {
+        "users": [
+            "CREATE INDEX IF NOT EXISTS idx_users_is_private ON users (is_private)",
+            "CREATE INDEX IF NOT EXISTS idx_users_message_privacy ON users (message_privacy)",
+        ],
+        "vibes": [
+            "CREATE INDEX IF NOT EXISTS idx_vibes_user_id ON vibes (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_vibes_expires_at ON vibes (expires_at)",
+            "CREATE INDEX IF NOT EXISTS idx_vibes_discovery ON vibes (expires_at, swipe_right_count)",
+        ],
+        "vibe_listens": [
+            "CREATE INDEX IF NOT EXISTS idx_vibe_listens_user_id ON vibe_listens (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_vibe_listens_vibe_id ON vibe_listens (vibe_id)",
+        ],
+        "vibe_swipes": [
+            "CREATE INDEX IF NOT EXISTS idx_vibe_swipes_user_id ON vibe_swipes (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_vibe_swipes_vibe_id ON vibe_swipes (vibe_id)",
+        ],
+        "follows": [
+            "CREATE INDEX IF NOT EXISTS idx_follows_follower_id ON follows (follower_id)",
+            "CREATE INDEX IF NOT EXISTS idx_follows_following_id ON follows (following_id)",
+            "CREATE INDEX IF NOT EXISTS idx_follows_status ON follows (status)",
+        ],
+        "dm_threads": [
+            "CREATE INDEX IF NOT EXISTS idx_dm_threads_user_low_id ON dm_threads (user_low_id)",
+            "CREATE INDEX IF NOT EXISTS idx_dm_threads_user_high_id ON dm_threads (user_high_id)",
+        ],
+        "dm_messages": [
+            "CREATE INDEX IF NOT EXISTS idx_dm_messages_thread_id ON dm_messages (thread_id)",
+            "CREATE INDEX IF NOT EXISTS idx_dm_messages_sender_id ON dm_messages (sender_id)",
+            "CREATE INDEX IF NOT EXISTS idx_dm_messages_created_at ON dm_messages (created_at)",
+        ],
+    }
+
+    for table_name, statements in index_sql.items():
+        if table_name not in table_names:
+            continue
+        for statement in statements:
+            connection.execute(text(statement))
