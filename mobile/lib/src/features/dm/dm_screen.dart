@@ -1,5 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/svibe_models.dart';
@@ -154,7 +161,12 @@ class _DmThreadView extends ConsumerStatefulWidget {
 
 class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   final _controller = TextEditingController();
+  final _recorder = AudioRecorder();
   late Future<List<DmMessage>> _messagesFuture;
+  bool _isSendingAudio = false;
+  bool _isRecording = false;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
 
   @override
   void initState() {
@@ -164,6 +176,8 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
+    _recorder.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -187,6 +201,143 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
         .read(apiClientProvider)
         .sendDmMessage(token, widget.thread.id, text: text);
     setState(() => _messagesFuture = _loadMessages());
+  }
+
+  Future<void> _toggleVoiceDm() async {
+    if (_isSendingAudio) {
+      return;
+    }
+    if (kIsWeb) {
+      await _pickAudioMessage();
+      return;
+    }
+    if (_isRecording) {
+      await _stopAndSendRecording();
+    } else {
+      await _startRecording();
+    }
+  }
+
+  Future<void> _pickAudioMessage() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const [
+        'aac',
+        'm4a',
+        'mp3',
+        'ogg',
+        'opus',
+        'wav',
+        'webm',
+      ],
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) {
+      return;
+    }
+    await _sendAudioBytes(bytes, filename: file.name, duration: 30);
+  }
+
+  Future<void> _startRecording() async {
+    final hasPermission = await _recorder.hasPermission();
+    if (!hasPermission) {
+      _show('Microphone permission is needed for voice DM.');
+      return;
+    }
+    final path = await _recordPath();
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        bitRate: 128000,
+        sampleRate: 44100,
+      ),
+      path: path,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isRecording = true;
+      _recordSeconds = 0;
+    });
+    _recordTimer?.cancel();
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (!mounted) {
+        return;
+      }
+      final next = _recordSeconds + 1;
+      setState(() => _recordSeconds = next);
+      if (next >= 30) {
+        await _stopAndSendRecording();
+      }
+    });
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    _recordTimer?.cancel();
+    final path = await _recorder.stop();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isRecording = false);
+    if (path == null) {
+      _show('Recording could not be saved.');
+      return;
+    }
+    final bytes = await File(path).readAsBytes();
+    await _sendAudioBytes(
+      bytes,
+      filename: path.split(RegExp(r'[\\/]')).last,
+      duration: _recordSeconds.clamp(1, 30),
+    );
+  }
+
+  Future<void> _sendAudioBytes(
+    List<int> bytes, {
+    required String filename,
+    required int duration,
+  }) async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null || _isSendingAudio) {
+      return;
+    }
+    setState(() => _isSendingAudio = true);
+    try {
+      await ref
+          .read(apiClientProvider)
+          .sendDmAudio(
+            token,
+            widget.thread.id,
+            bytes: bytes,
+            filename: filename,
+            duration: duration,
+          );
+      if (mounted) {
+        setState(() => _messagesFuture = _loadMessages());
+      }
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        _show(exception.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingAudio = false);
+      }
+    }
+  }
+
+  Future<String> _recordPath() async {
+    final filename = 'svibe_dm_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final dir = await getTemporaryDirectory();
+    return '${dir.path}${Platform.pathSeparator}$filename';
+  }
+
+  void _show(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -253,13 +404,27 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: 'Send a quiet signal',
+                    decoration: InputDecoration(
+                      hintText: _isRecording
+                          ? 'Recording ${_recordSeconds}s'
+                          : 'Send a quiet signal',
                     ),
                     onSubmitted: (_) => _send(),
                   ),
                 ),
                 const SizedBox(width: 10),
+                IconButton.filledTonal(
+                  tooltip: 'Voice DM',
+                  onPressed: _isSendingAudio ? null : _toggleVoiceDm,
+                  icon: _isSendingAudio
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(_isRecording ? Icons.stop : Icons.mic),
+                ),
+                const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _send,
                   style: FilledButton.styleFrom(

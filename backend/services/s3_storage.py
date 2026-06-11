@@ -146,7 +146,11 @@ def delete_audio_file(audio_url: str) -> None:
         return
 
 
-def upload_audio_file(user_id: UUID, audio_file: UploadFile) -> str:
+def _upload_audio_file_to_prefix(
+    user_id: UUID,
+    audio_file: UploadFile,
+    prefix: str,
+) -> str:
     if audio_file.content_type not in ALLOWED_AUDIO_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -156,10 +160,7 @@ def upload_audio_file(user_id: UUID, audio_file: UploadFile) -> str:
     _ensure_file_size(audio_file.file)
     audio_file.file.seek(0)
 
-    key = (
-        f"{settings.AWS_S3_AUDIO_PREFIX}/{user_id}/"
-        f"{uuid4()}{_extension(audio_file.filename)}"
-    )
+    key = f"{prefix.strip('/')}/{user_id}/{uuid4()}{_extension(audio_file.filename)}"
     extra_args = {"ContentType": audio_file.content_type or "application/octet-stream"}
 
     try:
@@ -176,6 +177,18 @@ def upload_audio_file(user_id: UUID, audio_file: UploadFile) -> str:
         ) from exc
 
     return _audio_object_url(key)
+
+
+def upload_audio_file(user_id: UUID, audio_file: UploadFile) -> str:
+    return _upload_audio_file_to_prefix(
+        user_id,
+        audio_file,
+        settings.AWS_S3_AUDIO_PREFIX,
+    )
+
+
+def upload_dm_audio_file(user_id: UUID, audio_file: UploadFile) -> str:
+    return _upload_audio_file_to_prefix(user_id, audio_file, "dm")
 
 
 def upload_profile_image(user_id: UUID, image_file: UploadFile) -> str:

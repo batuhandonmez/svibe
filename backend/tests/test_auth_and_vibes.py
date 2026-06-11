@@ -2,6 +2,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import routers.dm as dm_router
 import routers.vibes as vibes_router
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -276,6 +277,14 @@ def test_private_profile_follow_and_dm_settings(monkeypatch):
         ),
     )
     monkeypatch.setattr(vibes_router.random, "random", lambda: 0.99)
+    monkeypatch.setattr(
+        dm_router,
+        "upload_dm_audio_file",
+        lambda user_id, audio: (
+            f"https://svibe-audio-dev.s3.eu-central-1.amazonaws.com/dm/{user_id}/voice.m4a"
+        ),
+    )
+    monkeypatch.setattr(dm_router, "create_presigned_audio_url", lambda url: url)
 
     with TestClient(app) as client:
         owner = _register(client, "private_owner", is_vip=True)
@@ -338,9 +347,21 @@ def test_private_profile_follow_and_dm_settings(monkeypatch):
         assert message.status_code == 201
         assert message.json()["text"] == "heard your signal"
 
+        audio_message = client.post(
+            f"/dm/threads/{thread.json()['id']}/messages/audio",
+            headers=_headers(listener),
+            data={"duration": "5"},
+            files={"audio": ("voice.m4a", b"audio", "audio/mp4")},
+        )
+        assert audio_message.status_code == 201
+        assert audio_message.json()["text"] is None
+        assert audio_message.json()["audio_url"].endswith("/voice.m4a")
+
         inbox = client.get("/dm/threads", headers=_headers(owner))
         assert inbox.status_code == 200
-        assert inbox.json()["items"][0]["last_message"]["text"] == "heard your signal"
+        assert inbox.json()["items"][0]["last_message"]["audio_url"].endswith(
+            "/voice.m4a"
+        )
 
 
 def test_dm_privacy_blocks_non_followers():

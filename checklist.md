@@ -41,7 +41,7 @@
 - [x] Golden Voice icin shake your vibe sensör tetikleyici.
 - [x] Feed dinleme baslatma entegrasyonu.
 - [x] DM backend ve temel mesajlasma entegrasyonu.
-- [ ] Voice DM ses kaydi ve audio upload entegrasyonu.
+- [x] Voice DM ses kaydi ve audio upload entegrasyonu.
 
 ## Faz 5: Guvenlik ve Yayina Hazirlik
 - [ ] AWS access key rotate edilecek ve yerel `.env` tekrar guncellenecek.

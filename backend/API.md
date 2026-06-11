@@ -101,6 +101,7 @@ GET /dm/threads
 POST /dm/threads
 GET /dm/threads/{thread_id}/messages
 POST /dm/threads/{thread_id}/messages
+POST /dm/threads/{thread_id}/messages/audio
 ```
 
 `POST /dm/threads` accepts `{"user_id": "<target-user-id>"}`. The target user's
@@ -109,9 +110,10 @@ POST /dm/threads/{thread_id}/messages
 - `followers`: only accepted followers can start a DM
 - `off`: new DMs are blocked
 
-`POST /dm/threads/{thread_id}/messages` accepts text messages for now. The model
-also has `audio_url` so voice DM can be attached later without replacing the
-thread structure.
+`POST /dm/threads/{thread_id}/messages` accepts text messages.
+`POST /dm/threads/{thread_id}/messages/audio` accepts multipart `audio` plus a
+`duration` field from 1 to 30 seconds and stores the voice DM under the S3
+`dm/` prefix.
 
 ### Vibes
 

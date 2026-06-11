@@ -224,6 +224,24 @@ class SvibeApiClient {
     return DmMessage.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<DmMessage> sendDmAudio(
+    String token,
+    String threadId, {
+    required List<int> bytes,
+    required String filename,
+    required int duration,
+  }) async {
+    final response = await _post(
+      '/dm/threads/$threadId/messages/audio',
+      token: token,
+      data: FormData.fromMap({
+        'duration': duration,
+        'audio': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
+    );
+    return DmMessage.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<Response<dynamic>> _get(String path, {String? token}) {
     return _guarded(
       () => _dio.get<dynamic>(path, options: Options(headers: _headers(token))),

@@ -1,9 +1,9 @@
 # backend/routers/dm.py
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -21,6 +21,11 @@ from schemas.dm import (
     DmThreadCreate,
     DmThreadListResponse,
     DmThreadRead,
+)
+from services.s3_storage import (
+    create_presigned_audio_url,
+    delete_audio_file,
+    upload_dm_audio_file,
 )
 
 router = APIRouter(prefix="/dm", tags=["DM"])
@@ -56,7 +61,11 @@ def _to_message_read(message: DmMessage) -> DmMessageRead:
         thread_id=message.thread_id,
         sender_id=message.sender_id,
         text=message.text,
-        audio_url=message.audio_url,
+        audio_url=(
+            create_presigned_audio_url(message.audio_url)
+            if message.audio_url
+            else None
+        ),
         created_at=message.created_at,
     )
 
@@ -228,5 +237,58 @@ def send_message(
     db.add(message)
     db.add(thread)
     db.commit()
+    db.refresh(message)
+    return _to_message_read(message)
+
+
+@router.post(
+    "/threads/{thread_id}/messages/audio",
+    response_model=DmMessageRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def send_audio_message(
+    thread_id: UUID,
+    duration: int = Form(...),
+    audio: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if duration < 1 or duration > 30:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Voice DM duration must be between 1 and 30 seconds.",
+        )
+
+    thread = db.get(DmThread, thread_id)
+    if thread is None or not _is_participant(thread, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="DM thread not found.",
+        )
+    peer = _peer_for_thread(thread, current_user, db)
+    if not _can_start_dm(current_user, peer, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This user does not accept DMs from you.",
+        )
+
+    audio_url = upload_dm_audio_file(current_user.id, audio)
+    message = DmMessage(
+        thread_id=thread.id,
+        sender_id=current_user.id,
+        audio_url=audio_url,
+    )
+    thread.updated_at = utc_now()
+    db.add(message)
+    db.add(thread)
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        delete_audio_file(audio_url)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not save voice DM after audio upload.",
+        ) from exc
     db.refresh(message)
     return _to_message_read(message)
