@@ -438,47 +438,103 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    decoration: InputDecoration(
-                      hintText: _isRecording
-                          ? 'Recording ${_recordSeconds}s'
-                          : 'Send a quiet signal',
-                    ),
-                    onSubmitted: (_) => _send(),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton.filledTonal(
-                  tooltip: 'Voice DM',
-                  onPressed: _isSendingAudio ? null : _toggleVoiceDm,
-                  icon: _isSendingAudio
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(_isRecording ? Icons.stop : Icons.mic),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _send,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(54, 54),
-                    padding: EdgeInsets.zero,
-                    shape: const CircleBorder(),
-                  ),
-                  child: const Icon(Icons.near_me),
-                ),
-              ],
-            ),
+          _MessageComposer(
+            controller: _controller,
+            isRecording: _isRecording,
+            recordSeconds: _recordSeconds,
+            isSendingAudio: _isSendingAudio,
+            onVoiceTap: _toggleVoiceDm,
+            onSend: _send,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MessageComposer extends StatelessWidget {
+  const _MessageComposer({
+    required this.controller,
+    required this.isRecording,
+    required this.recordSeconds,
+    required this.isSendingAudio,
+    required this.onVoiceTap,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final bool isRecording;
+  final int recordSeconds;
+  final bool isSendingAudio;
+  final VoidCallback onVoiceTap;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: colors.elevated,
+          border: Border.all(color: theme.colorScheme.outline),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(
+                alpha: theme.brightness == Brightness.dark ? 0.24 : 0.08,
+              ),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Voice DM',
+              onPressed: isSendingAudio ? null : onVoiceTap,
+              icon: isSendingAudio
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic),
+            ),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                minLines: 1,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: isRecording
+                      ? 'Recording ${recordSeconds}s'
+                      : 'Send a quiet signal',
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+                onSubmitted: (_) => onSend(),
+              ),
+            ),
+            const SizedBox(width: 6),
+            FilledButton(
+              onPressed: onSend,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                padding: EdgeInsets.zero,
+                shape: const CircleBorder(),
+              ),
+              child: const Icon(Icons.near_me),
+            ),
+          ],
+        ),
       ),
     );
   }

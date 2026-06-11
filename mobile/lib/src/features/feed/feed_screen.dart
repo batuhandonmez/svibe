@@ -579,7 +579,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                 border: theme.colorScheme.outline,
                 onTap: onDislike,
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: 18),
               _SignalButton(
                 icon: Icons.favorite,
                 enabled: !isLocked,
@@ -846,14 +846,25 @@ class _SignalButton extends StatelessWidget {
         opacity: enabled ? 1 : .38,
         duration: const Duration(milliseconds: 180),
         child: Container(
-          width: 76,
-          height: 76,
+          width: 68,
+          height: 68,
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
             border: border == null ? null : Border.all(color: border!),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.20
+                      : 0.08,
+                ),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          child: Icon(icon, color: foreground, size: 33),
+          child: Icon(icon, color: foreground, size: 30),
         ),
       ),
     );

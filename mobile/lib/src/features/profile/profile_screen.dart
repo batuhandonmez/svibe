@@ -147,14 +147,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 if (vibes.isEmpty) {
                   return _EmptyVibes(onCastHint: () {});
                 }
-                return Column(
-                  children: [
-                    for (final vibe in vibes) ...[
-                      _VibeRow(vibe: vibe),
-                      const SizedBox(height: 12),
-                    ],
-                  ],
-                );
+                return _VibeGrid(vibes: vibes);
               },
             ),
           ],
@@ -731,8 +724,36 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
-class _VibeRow extends StatelessWidget {
-  const _VibeRow({required this.vibe});
+class _VibeGrid extends StatelessWidget {
+  const _VibeGrid({required this.vibes});
+
+  final List<VibeFeedItem> vibes;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 430;
+        final crossAxisCount = isWide ? 3 : 2;
+        return GridView.builder(
+          itemCount: vibes.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: isWide ? 0.88 : 0.82,
+          ),
+          itemBuilder: (context, index) => _VibeTile(vibe: vibes[index]),
+        );
+      },
+    );
+  }
+}
+
+class _VibeTile extends StatelessWidget {
+  const _VibeTile({required this.vibe});
 
   final VibeFeedItem vibe;
 
@@ -741,46 +762,51 @@ class _VibeRow extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.extension<SvibeColors>()!;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.elevated,
+        color: theme.colorScheme.surface,
         border: Border.all(color: colors.border),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 74,
-            height: 46,
-            child: CustomPaint(
-              painter: _MiniWavePainter(
-                color: vibe.isGoldenVoice ? colors.lime : colors.berry,
+          Expanded(
+            child: Center(
+              child: SizedBox(
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: _MiniWavePainter(
+                    color: vibe.isGoldenVoice ? colors.lime : colors.berry,
+                  ),
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  vibe.isGoldenVoice ? 'Golden voice' : 'Public vibe',
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  vibe.isGoldenVoice ? 'Golden' : 'Vibe',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${vibe.duration}s - ${vibe.swipeRightCount} likes',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              Icon(
+                vibe.isGoldenVoice ? Icons.auto_awesome : Icons.favorite,
+                size: 17,
+                color: vibe.isGoldenVoice ? colors.lime : colors.berry,
+              ),
+            ],
           ),
-          Icon(
-            vibe.isGoldenVoice ? Icons.auto_awesome : Icons.favorite,
-            color: vibe.isGoldenVoice ? colors.lime : colors.berry,
+          const SizedBox(height: 3),
+          Text(
+            '${vibe.duration}s  /  ${vibe.swipeRightCount} likes',
+            style: TextStyle(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -798,10 +824,11 @@ class _MiniWavePainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = 4;
-    for (var i = 0; i < 11; i++) {
-      final h = 12 + (i % 5) * 7.0;
-      final x = i * size.width / 10;
+      ..strokeWidth = 3.5;
+    const bars = 13;
+    for (var i = 0; i < bars; i++) {
+      final h = size.height * (0.24 + (i % 6) * 0.10);
+      final x = i * size.width / (bars - 1);
       canvas.drawLine(
         Offset(x, size.height / 2 - h / 2),
         Offset(x, size.height / 2 + h / 2),
