@@ -60,6 +60,8 @@ Bu rapor, projenin su anki durumunu sade dille anlatir.
 - `anon` ve `authenticated` Data API rollerinin public Svibe tablolarindaki
   genis yetkileri revoke edildi.
 - Backend'e temel in-process rate limit middleware'i eklendi.
+- Production ortaminda default/kisa JWT secret ile API'nin acilmasini engelleyen
+  guard eklendi.
 
 ## Son Dogrulama
 

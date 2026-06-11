@@ -81,6 +81,8 @@ https://www.figma.com/design/DRmbMcSTxxrcDvSLWM7ZG3/Svibe-Mobile-Redesign
 ## Notes
 
 - Do not commit `backend/.env`.
+- Set `ENVIRONMENT=production` only with a non-default `JWT_SECRET_KEY` of at
+  least 32 characters; the API refuses to start otherwise.
 - The AWS key used during local development should be rotated before serious
   production work.
 - Windows desktop Flutter builds require a complete Visual Studio C++ toolchain.

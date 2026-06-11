@@ -1,4 +1,5 @@
 # backend/core/config.py
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     DATABASE_URL: str
+    ENVIRONMENT: str = "development"
     CORS_ALLOW_ORIGINS: str = (
         "http://localhost:3000,"
         "http://127.0.0.1:3000,"
@@ -34,6 +36,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     AUTH_RATE_LIMIT_PER_WINDOW: int = 30
     WRITE_RATE_LIMIT_PER_WINDOW: int = 120
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if self.ENVIRONMENT.lower() not in {"production", "prod"}:
+            return self
+        if self.JWT_SECRET_KEY == "svibe-dev-change-me":
+            raise ValueError("JWT_SECRET_KEY must be changed in production.")
+        if len(self.JWT_SECRET_KEY) < 32:
+            raise ValueError("JWT_SECRET_KEY must be at least 32 characters.")
+        return self
 
     @property
     def cors_allow_origins(self) -> list[str]:
