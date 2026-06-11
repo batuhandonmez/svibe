@@ -30,6 +30,12 @@ no policies can make data inaccessible through the Supabase Data API. The
 FastAPI service may keep working through its database connection, but future
 Supabase client access will be blocked until policies are correct.
 
+On 2026-06-11, the project also verified that `anon` and `authenticated` had
+wide table privileges on the exposed public tables. Because Flutter currently
+uses FastAPI instead of direct Supabase table access, those Data API grants were
+revoked with `docs/supabase_revoke_public_data_api_grants.sql`. This reduces
+immediate exposure but does not replace RLS.
+
 ## Intended Access Model
 
 - Users can read public profile fields for non-private accounts.
@@ -62,6 +68,21 @@ Supabase client access will be blocked until policies are correct.
 3. Create policies in a development branch or disposable project.
 4. Run backend tests and a real login/discover/swipe/DM smoke test.
 5. Enable RLS in production only after the policy behavior is proven.
+
+## Data API Grant Hardening Applied
+
+The following direct table grants were revoked for `anon` and `authenticated`:
+
+- `public.users`
+- `public.vibes`
+- `public.vibe_listens`
+- `public.vibe_swipes`
+- `public.follows`
+- `public.dm_threads`
+- `public.dm_messages`
+
+If the mobile app later talks directly to Supabase table endpoints, add
+well-scoped RLS policies and re-grant only the required operations.
 
 ## Policy Skeleton
 

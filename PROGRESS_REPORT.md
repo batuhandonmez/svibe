@@ -57,6 +57,8 @@ Bu rapor, projenin su anki durumunu sade dille anlatir.
 - RLS ve policy filtrelerine hazirlik icin indexler Supabase'e migration olarak
   uygulandi.
 - Ayni index SQL'i `docs/supabase_security_indexes.sql` dosyasinda tutuluyor.
+- `anon` ve `authenticated` Data API rollerinin public Svibe tablolarindaki
+  genis yetkileri revoke edildi.
 - Backend'e temel in-process rate limit middleware'i eklendi.
 
 ## Son Dogrulama
@@ -101,6 +103,8 @@ Demo smoke check:
 
 - RLS'i dogrudan production'da acmadan once Supabase Auth / custom JWT kararini
   netlestirmek.
+- Supabase Data API dogrudan kullanilacaksa RLS policy + dar grant modelini
+  birlikte tasarlamak.
 - AWS access key rotate etmek; anahtar gecmiste chat icinde paylasildi.
 - Gercek cihazda mikrofon, motion sensor, Cast ve Shake rituelini uc uca test
   etmek.
