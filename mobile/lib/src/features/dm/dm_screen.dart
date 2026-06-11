@@ -41,7 +41,7 @@ class _DmInbox extends ConsumerWidget {
     final token = auth.token;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Signals')),
+      appBar: AppBar(title: const Text('DM')),
       body: token == null
           ? const Center(child: Text('Log in to see messages.'))
           : FutureBuilder<List<DmThread>>(
@@ -93,14 +93,14 @@ class _ThreadTile extends ConsumerWidget {
     final preview = thread.lastMessage?.text ?? 'No messages yet';
     final colors = theme.extension<SvibeColors>()!;
     return InkWell(
-      borderRadius: BorderRadius.circular(30),
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: colors.elevated,
           border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         ),
         child: Row(
           children: [
@@ -133,7 +133,7 @@ class _ThreadTile extends ConsumerWidget {
             SizedBox(
               width: 62,
               height: 38,
-              child: CustomPaint(painter: _DmWavePainter(color: colors.lime)),
+              child: CustomPaint(painter: _DmWavePainter(color: colors.orange)),
             ),
           ],
         ),
@@ -295,7 +295,7 @@ class _MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: mine ? colors.berry : colors.elevated,
+          color: mine ? colors.blue : colors.elevated,
           border: Border.all(color: theme.colorScheme.outline),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(24),
@@ -348,9 +348,9 @@ class _ThreadSignalHeader extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: colors.lime.withValues(alpha: 0.13),
-          border: Border.all(color: colors.lime.withValues(alpha: 0.38)),
-          borderRadius: BorderRadius.circular(26),
+          color: colors.orange.withValues(alpha: 0.13),
+          border: Border.all(color: colors.orange.withValues(alpha: 0.38)),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         ),
         child: Row(
           children: [
@@ -358,7 +358,7 @@ class _ThreadSignalHeader extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: colors.lime,
+                color: colors.orange,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.black, width: 2),
               ),
@@ -439,7 +439,7 @@ class _InboxHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Private signals',
+            'Direct signals',
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w900,
             ),
@@ -451,14 +451,14 @@ class _InboxHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: theme.extension<SvibeColors>()!.elevated,
               border: Border.all(color: theme.colorScheme.outline),
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(AppTheme.cardRadius),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: CustomPaint(
                     painter: _DmWavePainter(
-                      color: theme.extension<SvibeColors>()!.blue,
+                      color: theme.extension<SvibeColors>()!.orange,
                     ),
                   ),
                 ),
@@ -499,7 +499,7 @@ class _EmptyDm extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Bir profil DM kabul ediyorsa konuşma burada görünür.',
+              'When a profile accepts DM, the thread appears here.',
               textAlign: TextAlign.center,
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),

@@ -29,3 +29,4 @@ Thumbs.db
 
 # Local reports and generated logs
 *.log
+outputs/

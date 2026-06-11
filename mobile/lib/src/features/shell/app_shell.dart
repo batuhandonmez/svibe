@@ -29,19 +29,18 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [FeedScreen(onOpenDm: _openDm), const ProfileScreen()];
+    final pages = [
+      FeedScreen(onOpenDm: _openDm, onOpenCast: _openCast),
+      const ProfileScreen(),
+    ];
     final theme = Theme.of(context);
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: _CastActionButton(onPressed: _openCast),
       bottomNavigationBar: BottomAppBar(
-        height: 82,
+        height: 72,
         color: theme.colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 9,
         child: Row(
           children: [
             Expanded(
@@ -53,7 +52,6 @@ class _AppShellState extends State<AppShell> {
                 onTap: () => setState(() => _index = 0),
               ),
             ),
-            const SizedBox(width: 84),
             Expanded(
               child: _ShellTab(
                 icon: Icons.person_outline,
@@ -65,30 +63,6 @@ class _AppShellState extends State<AppShell> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CastActionButton extends StatelessWidget {
-  const _CastActionButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      width: 72,
-      height: 72,
-      child: FloatingActionButton(
-        heroTag: 'svibe-cast',
-        onPressed: onPressed,
-        elevation: 0,
-        backgroundColor: theme.colorScheme.tertiary,
-        foregroundColor: Colors.black,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.graphic_eq, size: 34),
       ),
     );
   }
@@ -113,7 +87,7 @@ class _ShellTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

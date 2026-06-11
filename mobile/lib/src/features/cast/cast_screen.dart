@@ -341,7 +341,7 @@ class _CastHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.elevated,
         border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -415,7 +415,7 @@ class _RecordPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.elevated,
         border: Border.all(color: isRecording ? colors.berry : colors.border),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -478,7 +478,7 @@ class _AudioPickerPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.elevated,
         border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -569,7 +569,7 @@ class _CastPad extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.elevated,
         border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -641,7 +641,7 @@ class _CastPad extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Button fallback stays ready.',
+                  'Manual cast stays ready.',
                   style: TextStyle(
                     color: theme.colorScheme.onSurfaceVariant,
                     fontSize: 12,

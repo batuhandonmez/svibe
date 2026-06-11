@@ -169,7 +169,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.lime,
+                    color: colors.orange,
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: const Text(
@@ -337,10 +337,10 @@ class _EditableHeroAvatar extends StatelessWidget {
             height: 132,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: colors.lime, width: 3),
+              border: Border.all(color: colors.orange, width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: colors.lime.withValues(alpha: 0.16),
+                  color: colors.orange.withValues(alpha: 0.16),
                   blurRadius: 28,
                   offset: const Offset(0, 12),
                 ),
@@ -363,7 +363,7 @@ class _EditableHeroAvatar extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: colors.berry,
+                color: colors.blue,
                 shape: BoxShape.circle,
                 border: Border.all(color: theme.colorScheme.surface, width: 2),
               ),
@@ -563,7 +563,7 @@ class _ProfileMetric extends StatelessWidget {
         decoration: BoxDecoration(
           color: colors.elevated,
           border: Border.all(color: colors.border),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         ),
         child: Column(
           children: [
@@ -615,7 +615,7 @@ class _SettingsPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.elevated,
         border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
         children: [
@@ -701,7 +701,7 @@ class _VibeRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.elevated,
         border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -710,7 +710,7 @@ class _VibeRow extends StatelessWidget {
             height: 46,
             child: CustomPaint(
               painter: _MiniWavePainter(
-                color: vibe.isGoldenVoice ? colors.lime : colors.berry,
+                color: vibe.isGoldenVoice ? colors.orange : colors.blue,
               ),
             ),
           ),
@@ -736,7 +736,7 @@ class _VibeRow extends StatelessWidget {
           ),
           Icon(
             vibe.isGoldenVoice ? Icons.auto_awesome : Icons.favorite,
-            color: vibe.isGoldenVoice ? colors.orange : colors.berry,
+            color: vibe.isGoldenVoice ? colors.orange : colors.blue,
           ),
         ],
       ),
@@ -785,7 +785,7 @@ class _EmptyVibes extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
         children: [

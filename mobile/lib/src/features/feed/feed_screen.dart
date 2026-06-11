@@ -12,9 +12,14 @@ import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
-  const FeedScreen({required this.onOpenDm, super.key});
+  const FeedScreen({
+    required this.onOpenDm,
+    required this.onOpenCast,
+    super.key,
+  });
 
   final VoidCallback onOpenDm;
+  final VoidCallback onOpenCast;
 
   @override
   ConsumerState<FeedScreen> createState() => _FeedScreenState();
@@ -195,6 +200,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       appBar: AppBar(
         title: const Text('Svibe'),
         actions: [
+          _CastButton(onPressed: widget.onOpenCast),
+          const SizedBox(width: 8),
           _DmButton(onPressed: widget.onOpenDm),
           const SizedBox(width: 10),
         ],
@@ -231,7 +238,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'One voice at a time.',
+                'Discovery signal active',
                 style: TextStyle(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 12,
@@ -242,6 +249,31 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CastButton extends StatelessWidget {
+  const _CastButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
+    return IconButton.filled(
+      tooltip: 'Cast',
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: colors.orange,
+        foregroundColor: Colors.black,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.controlRadius),
+          side: BorderSide(color: theme.colorScheme.onSurface, width: 1.5),
+        ),
+      ),
+      icon: const Icon(Icons.near_me),
     );
   }
 }
@@ -300,7 +332,7 @@ class _StatusRail extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -438,7 +470,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surface,
                       border: Border.all(color: theme.colorScheme.outline),
-                      borderRadius: BorderRadius.circular(34),
+                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(
@@ -601,7 +633,7 @@ class _SwipeStamp extends StatelessWidget {
                 ? colors.berry.withValues(alpha: 0.14)
                 : Theme.of(context).colorScheme.surface,
             border: Border.all(color: color, width: 2),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           ),
           child: Text(
             isLike ? 'LIKE' : 'PASS',
@@ -930,7 +962,7 @@ class _InlineError extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.colorScheme.error.withValues(alpha: .12),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -1022,7 +1054,7 @@ class _GoldenRitualCard extends StatelessWidget {
       height: 184,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(34),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         border: Border.all(color: Colors.black, width: 2),
       ),
       child: Stack(
@@ -1162,7 +1194,7 @@ class _MiniStat extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         color: theme.extension<SvibeColors>()!.elevated,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         border: Border.all(color: theme.colorScheme.outline),
       ),
       child: Column(

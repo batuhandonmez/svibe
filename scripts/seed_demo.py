@@ -35,6 +35,9 @@ DEMO_USERS = [
     ("atlas_signal", "Atlas", "Tiny thoughts in short waves.", False, "everyone"),
     ("nova_signal", "Nova Signal", "Golden Voice hunter.", False, "followers"),
     ("echo_deniz", "Echo Deniz", "Morning notes and street sounds.", False, "everyone"),
+    ("sol_rana", "Sol Rana", "Field recordings and small confessions.", False, "everyone"),
+    ("noir_kaan", "Noir Kaan", "Late train thoughts in 30 seconds.", False, "followers"),
+    ("private_lale", "Private Lale", "Closed-circle voice notes.", True, "off"),
 ]
 DEMO_VIBES = [
     ("demo_user", 14, 330.0, 42, False, "demo-own-intro.wav"),
@@ -42,6 +45,9 @@ DEMO_VIBES = [
     ("atlas_signal", 15, 523.25, 118, False, "atlas-short-thought.wav"),
     ("nova_signal", 10, 659.25, 231, True, "nova-golden-voice.wav"),
     ("echo_deniz", 18, 392.0, 47, False, "echo-morning-note.wav"),
+    ("sol_rana", 11, 587.33, 69, False, "sol-field-note.wav"),
+    ("noir_kaan", 16, 293.66, 91, False, "noir-late-train.wav"),
+    ("private_lale", 13, 349.23, 12, False, "private-closed-note.wav"),
 ]
 
 
@@ -90,6 +96,31 @@ def upsert_user(db, username, display_name, bio, is_private, message_privacy):
     user.is_private = is_private
     user.message_privacy = message_privacy
     return user
+
+
+def seed_thread(db, users, demo, username, messages):
+    friend = users[username]
+    low, high = thread_pair(demo.id, friend.id)
+    thread = db.scalar(
+        select(DmThread).where(
+            DmThread.user_low_id == low,
+            DmThread.user_high_id == high,
+        )
+    )
+    if thread is None:
+        thread = DmThread(user_low_id=low, user_high_id=high)
+        db.add(thread)
+        db.flush()
+    db.execute(delete(DmMessage).where(DmMessage.thread_id == thread.id))
+    for sender_username, text in messages:
+        db.add(
+            DmMessage(
+                thread_id=thread.id,
+                sender_id=users[sender_username].id,
+                text=text,
+            )
+        )
+    thread.updated_at = utc_now()
 
 
 def main() -> None:
@@ -141,39 +172,37 @@ def main() -> None:
             vibe.is_golden_voice = golden
             vibe.expires_at = utc_now() + timedelta(days=7)
 
-        friend = users["mira_wave"]
-        low, high = thread_pair(demo.id, friend.id)
-        thread = db.scalar(
-            select(DmThread).where(
-                DmThread.user_low_id == low,
-                DmThread.user_high_id == high,
-            )
-        )
-        if thread is None:
-            thread = DmThread(user_low_id=low, user_high_id=high)
-            db.add(thread)
-            db.flush()
-        db.execute(delete(DmMessage).where(DmMessage.thread_id == thread.id))
-        db.add_all(
+        seed_thread(
+            db,
+            users,
+            demo,
+            "mira_wave",
             [
-                DmMessage(
-                    thread_id=thread.id,
-                    sender_id=friend.id,
-                    text="The one-card feed feels much clearer now.",
-                ),
-                DmMessage(
-                    thread_id=thread.id,
-                    sender_id=demo.id,
-                    text="Right is like, left is pass. Cast sits in the center.",
-                ),
-                DmMessage(
-                    thread_id=thread.id,
-                    sender_id=friend.id,
-                    text="Show me the Golden Voice shake screen next.",
-                ),
-            ]
+                ("mira_wave", "The one-card feed feels much clearer now."),
+                ("demo_user", "Right is like, left is pass. Cast moved out of the tab bar."),
+                ("mira_wave", "Show me the Golden Voice shake screen next."),
+            ],
         )
-        thread.updated_at = utc_now()
+        seed_thread(
+            db,
+            users,
+            demo,
+            "atlas_signal",
+            [
+                ("atlas_signal", "Your profile now looks less like a template."),
+                ("demo_user", "Next pass is the DM voice recording."),
+            ],
+        )
+        seed_thread(
+            db,
+            users,
+            demo,
+            "nova_signal",
+            [
+                ("nova_signal", "Golden Voice is seeded in discovery."),
+                ("demo_user", "Good. I want the unlock ritual to feel rare."),
+            ],
+        )
         db.commit()
         print("Seeded demo_user/demo12345 with demo vibes and DM.")
     finally:
