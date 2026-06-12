@@ -75,26 +75,48 @@ cd backend
 .\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+Development builds allow local HTTP API traffic for `http://YOUR_COMPUTER_LAN_IP:8000`.
+On iOS, accept the local network prompt if it appears.
+
 ## Local Web Demo
 
-Seed demo users, public discovery vibes, profile vibes, and DM content:
+For an iPhone Safari demo, keep the computer and iPhone on the same Wi-Fi, then
+use the computer LAN IP in every command below. The example IP is
+`192.168.1.102`; replace it with your current value.
 
 ```powershell
-backend\venv\Scripts\python.exe scripts\seed_demo.py
+# Find the computer LAN IPv4 address
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
+  $_.IPAddress -notlike '127.*' -and $_.PrefixOrigin -ne 'WellKnown'
+} | Select-Object IPAddress,InterfaceAlias
 ```
 
-Build a web demo against the local API:
+Start the backend so the iPhone can reach it:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Seed local demo users, public discovery vibes, and DM content without using
+AWS/S3. Use `demo_user` for the one-tap demo login, or replace it with your
+own account username:
+
+```powershell
+backend\venv\Scripts\python.exe scripts\seed_local_demo.py --username demo_user --base-url http://YOUR_COMPUTER_LAN_IP:8000
+```
+
+Run the Flutter web demo for Safari on the iPhone:
 
 ```powershell
 cd mobile
-flutter build web --dart-define API_BASE_URL=http://127.0.0.1:8002 --output C:\svibe_web_demo
+flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8096 --dart-define API_BASE_URL=http://YOUR_COMPUTER_LAN_IP:8000
 ```
 
-Serve the generated web build:
+Open this on the iPhone:
 
-```powershell
-cd C:\svibe_web_demo
-python -m http.server 8093
+```text
+http://YOUR_COMPUTER_LAN_IP:8096
 ```
 
 Demo login:
@@ -104,7 +126,9 @@ demo_user / demo12345
 ```
 
 In the web/mobile login screen, the demo credential card fills and submits this
-account with one tap after `scripts\seed_demo.py` has been run.
+account with one tap after `scripts\seed_demo.py` has been run. For a newly
+created account, use `scripts\seed_local_demo.py --username <your_username>` to
+add local demo feed and DM data.
 
 Figma redesign file:
 

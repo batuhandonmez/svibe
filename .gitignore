@@ -30,4 +30,5 @@ Thumbs.db
 # Local reports and generated logs
 *.log
 *.sqlite3
+backend/local_media/
 outputs/

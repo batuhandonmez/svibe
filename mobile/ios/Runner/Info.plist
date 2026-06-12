@@ -26,6 +26,13 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Svibe uses the microphone so you can record and cast short voices.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Svibe connects to your local development backend while testing on this device.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

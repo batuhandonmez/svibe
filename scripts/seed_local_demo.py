@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import argparse
+import io
+import math
+import os
+import sys
+import wave
+from datetime import timedelta
+from pathlib import Path
+
+from sqlalchemy import select
+
+ROOT = Path(__file__).resolve().parents[1]
+BACKEND = ROOT / "backend"
+sys.path.insert(0, str(BACKEND))
+os.chdir(BACKEND)
+
+from core.database import SessionLocal  # noqa: E402
+from core.security import hash_password  # noqa: E402
+from core.time import utc_now  # noqa: E402
+from models.dm_message import DmMessage  # noqa: E402
+from models.dm_thread import DmThread  # noqa: E402
+from models.user import User  # noqa: E402
+from models.vibe import Vibe  # noqa: E402
+
+
+DEMO_PASSWORD = "demo12345"
+DEMO_USERS = [
+    ("mira_wave", "Mira Wave", "Night walks, small city notes.", False, "everyone"),
+    ("atlas_signal", "Atlas", "Short thoughts in clean audio.", False, "everyone"),
+    ("nova_signal", "Nova Signal", "Rare Golden Voice energy.", False, "followers"),
+    ("echo_deniz", "Echo Deniz", "Morning sounds and street fragments.", False, "everyone"),
+]
+DEMO_VIBES = [
+    ("mira_wave", 12, 440.0, 84, False, "mira-city-walk.wav"),
+    ("atlas_signal", 15, 523.25, 118, False, "atlas-short-thought.wav"),
+    ("nova_signal", 10, 659.25, 231, True, "nova-golden-voice.wav"),
+    ("echo_deniz", 18, 392.0, 47, False, "echo-morning-note.wav"),
+]
+
+
+def make_wav(freq: float, seconds: int) -> bytes:
+    sample_rate = 22050
+    frames = int(sample_rate * seconds)
+    out = io.BytesIO()
+    with wave.open(out, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        for i in range(frames):
+            fade_in = i / (sample_rate * 0.12)
+            fade_out = (frames - i) / (sample_rate * 0.2)
+            envelope = max(0.0, min(1.0, fade_in, fade_out))
+            tone = math.sin(2 * math.pi * freq * i / sample_rate)
+            wobble = math.sin(2 * math.pi * (freq * 0.5) * i / sample_rate) * 0.18
+            value = int(16000 * envelope * (tone + wobble))
+            wav.writeframesraw(value.to_bytes(2, byteorder="little", signed=True))
+    return out.getvalue()
+
+
+def upsert_demo_user(db, username, display_name, bio, is_private, message_privacy):
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        user = User(username=username)
+        db.add(user)
+        db.flush()
+    user.display_name = display_name
+    user.bio = bio
+    user.password_hash = hash_password(DEMO_PASSWORD)
+    user.is_muted = False
+    user.is_vip = True
+    user.daily_vibe_count = 30
+    user.is_private = is_private
+    user.message_privacy = message_privacy
+    return user
+
+
+def thread_pair(a, b):
+    return tuple(sorted([a, b], key=str))
+
+
+def add_thread(db, viewer, peer, messages):
+    low, high = thread_pair(viewer.id, peer.id)
+    thread = db.scalar(
+        select(DmThread).where(
+            DmThread.user_low_id == low,
+            DmThread.user_high_id == high,
+        )
+    )
+    if thread is None:
+        thread = DmThread(user_low_id=low, user_high_id=high)
+        db.add(thread)
+        db.flush()
+
+    if db.scalar(select(DmMessage).where(DmMessage.thread_id == thread.id)) is None:
+        for sender, text in messages:
+            db.add(
+                DmMessage(
+                    thread_id=thread.id,
+                    sender_id=sender.id,
+                    text=text,
+                )
+            )
+    thread.updated_at = utc_now()
+
+
+def latest_user(db) -> User:
+    user = db.scalar(select(User).order_by(User.created_at.desc()).limit(1))
+    if user is None:
+        raise SystemExit("No users found. Create an account first.")
+    return user
+
+
+def viewer_user(db, username: str | None) -> User:
+    if not username:
+        return latest_user(db)
+
+    user = db.scalar(select(User).where(User.username == username))
+    if user is not None:
+        return user
+
+    user = User(
+        username=username,
+        display_name=username.replace("_", " ").title(),
+        bio="Local demo account.",
+        password_hash=hash_password(DEMO_PASSWORD),
+        is_muted=False,
+        is_vip=True,
+        daily_vibe_count=30,
+        is_private=False,
+        message_privacy="everyone",
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed local demo vibes and DMs.")
+    parser.add_argument("--username", help="Viewer username. Defaults to latest user.")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    args = parser.parse_args()
+
+    media_dir = BACKEND / "local_media" / "demo"
+    media_dir.mkdir(parents=True, exist_ok=True)
+
+    db = SessionLocal()
+    try:
+        viewer = viewer_user(db, args.username)
+        users = {
+            username: upsert_demo_user(db, username, display, bio, private, privacy)
+            for username, display, bio, private, privacy in DEMO_USERS
+        }
+        db.flush()
+
+        for username, duration, freq, likes, golden, filename in DEMO_VIBES:
+            path = media_dir / filename
+            path.write_bytes(make_wav(freq, duration))
+            audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
+            matching_vibes = db.scalars(
+                select(Vibe).where(Vibe.audio_url.like(f"%/media/demo/{filename}"))
+            ).all()
+            vibe = matching_vibes[0] if matching_vibes else None
+            if vibe is None:
+                vibe = Vibe(user_id=users[username].id, audio_url=audio_url)
+                db.add(vibe)
+            for duplicate in matching_vibes[1:]:
+                db.delete(duplicate)
+            vibe.audio_url = audio_url
+            vibe.duration = duration
+            vibe.swipe_right_count = likes
+            vibe.is_golden_voice = golden
+            vibe.expires_at = utc_now() + timedelta(days=7)
+
+        add_thread(
+            db,
+            viewer,
+            users["mira_wave"],
+            [
+                (users["mira_wave"], "Feed is no longer empty. Try swiping after 3 seconds."),
+                (viewer, "Nice, I can finally show the flow."),
+            ],
+        )
+        add_thread(
+            db,
+            viewer,
+            users["nova_signal"],
+            [
+                (users["nova_signal"], "A Golden Voice is waiting in discovery."),
+                (viewer, "I want the shake ritual to feel rare."),
+            ],
+        )
+        db.commit()
+        print(f"Seeded local demo for {viewer.username}.")
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main()

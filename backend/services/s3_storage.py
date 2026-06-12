@@ -124,6 +124,11 @@ def create_presigned_audio_url(audio_url: str, expires_in: int = 3600) -> str:
     if not _has_s3_settings():
         return audio_url
 
+    parsed = urlparse(audio_url)
+    expected_host = f"{settings.AWS_S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com"
+    if parsed.netloc != expected_host:
+        return audio_url
+
     key = _key_from_audio_url(audio_url)
     try:
         return _client().generate_presigned_url(

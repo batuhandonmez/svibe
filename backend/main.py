@@ -1,8 +1,10 @@
 # backend/main.py
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from core.config import settings
 from core.database import Base, engine
@@ -35,6 +37,10 @@ if settings.cors_allow_origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allow_origins,
+        allow_origin_regex=(
+            r"^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|"
+            r"10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):\d+$"
+        ),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -47,6 +53,10 @@ app.add_middleware(
     write_limit=settings.WRITE_RATE_LIMIT_PER_WINDOW,
     window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
 )
+
+local_media_dir = Path(__file__).resolve().parent / "local_media"
+local_media_dir.mkdir(exist_ok=True)
+app.mount("/media", StaticFiles(directory=local_media_dir), name="media")
 
 app.include_router(health_router)
 app.include_router(auth_router)
