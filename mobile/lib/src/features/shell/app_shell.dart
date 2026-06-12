@@ -33,83 +33,198 @@ class _AppShellState extends State<AppShell> {
       FeedScreen(onOpenDm: _openDm, onOpenCast: _openCast),
       const ProfileScreen(),
     ];
-    final theme = Theme.of(context);
+
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
-      bottomNavigationBar: BottomAppBar(
-        height: 72,
-        color: theme.colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        child: Row(
-          children: [
-            Expanded(
-              child: _ShellTab(
-                icon: Icons.travel_explore_outlined,
-                activeIcon: Icons.travel_explore,
-                label: 'Feed',
-                selected: _index == 0,
-                onTap: () => setState(() => _index = 0),
+      extendBody: true,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: IndexedStack(index: _index, children: pages),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 18,
+            child: SafeArea(
+              top: false,
+              child: Center(
+                child: _GlassNav(
+                  index: _index,
+                  onFeed: () => setState(() => _index = 0),
+                  onProfile: () => setState(() => _index = 1),
+                  onCast: _openCast,
+                ),
               ),
             ),
-            Expanded(
-              child: _ShellTab(
-                icon: Icons.person_outline,
-                activeIcon: Icons.person,
-                label: 'Profile',
-                selected: _index == 1,
-                onTap: () => setState(() => _index = 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlassNav extends StatelessWidget {
+  const _GlassNav({
+    required this.index,
+    required this.onFeed,
+    required this.onProfile,
+    required this.onCast,
+  });
+
+  final int index;
+  final VoidCallback onFeed;
+  final VoidCallback onProfile;
+  final VoidCallback onCast;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return SizedBox(
+      width: 306,
+      height: 86,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: 58,
+              decoration: BoxDecoration(
+                color: dark
+                    ? const Color(0xFF181817).withValues(alpha: .86)
+                    : Colors.white.withValues(alpha: .88),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: dark
+                      ? const Color(0xFF32302E)
+                      : const Color(0xFFE4E0D8),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: dark ? .42 : .13),
+                    blurRadius: 28,
+                    offset: const Offset(0, 14),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _NavIcon(
+                      icon: Icons.explore_outlined,
+                      activeIcon: Icons.explore,
+                      selected: index == 0,
+                      onTap: onFeed,
+                    ),
+                  ),
+                  const SizedBox(width: 86),
+                  Expanded(
+                    child: _NavIcon(
+                      icon: Icons.person_outline,
+                      activeIcon: Icons.person,
+                      selected: index == 1,
+                      onTap: onProfile,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
+          Positioned(top: 0, child: _CenterCastButton(onTap: onCast)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CenterCastButton extends StatelessWidget {
+  const _CenterCastButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          width: 74,
+          height: 74,
+          decoration: BoxDecoration(
+            color: dark ? const Color(0xFFE5E1D8) : const Color(0xFF171615),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: dark ? const Color(0xFF101010) : Colors.white,
+              width: 7,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: dark ? .48 : .20),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.mic_external_on,
+            color: dark ? const Color(0xFF111111) : const Color(0xFFF2EFE8),
+            size: 34,
+          ),
         ),
       ),
     );
   }
 }
 
-class _ShellTab extends StatelessWidget {
-  const _ShellTab({
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({
     required this.icon,
     required this.activeIcon,
-    required this.label,
     required this.selected,
     required this.onTap,
   });
 
   final IconData icon;
   final IconData activeIcon;
-  final String label;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            selected ? activeIcon : icon,
-            color: selected
-                ? theme.colorScheme.onSurface
-                : theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
+    final dark = theme.brightness == Brightness.dark;
+    final foreground = dark ? const Color(0xFFE3DFD7) : const Color(0xFF171615);
+    final muted = dark ? const Color(0xFFA9A49C) : const Color(0xFF77716B);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
               color: selected
-                  ? theme.colorScheme.onSurface
-                  : theme.colorScheme.onSurfaceVariant,
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  ? foreground.withValues(alpha: dark ? .10 : .08)
+                  : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              selected ? activeIcon : icon,
+              color: selected ? foreground : muted,
+              size: 25,
             ),
           ),
-        ],
+        ),
       ),
     );
   }

@@ -26,9 +26,10 @@ class FeedScreen extends ConsumerStatefulWidget {
 }
 
 class _FeedScreenState extends ConsumerState<FeedScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _player = AudioPlayer();
   late final AnimationController _waveController;
+  late final AnimationController _unlockController;
   StreamSubscription<ProcessingState>? _stateSubscription;
   VibeFeedItem? _item;
   bool _isLoading = true;
@@ -44,6 +45,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat();
+    _unlockController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    );
     _stateSubscription = _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed && !_isAdvancing) {
         _loadNext();
@@ -57,6 +62,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     _unlockTimer?.cancel();
     _stateSubscription?.cancel();
     _waveController.dispose();
+    _unlockController.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -68,6 +74,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     }
     _isAdvancing = true;
     _unlockTimer?.cancel();
+    _unlockController.stop();
+    _unlockController.reset();
     setState(() {
       _isLoading = true;
       _isLocked = true;
@@ -87,12 +95,18 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       if (next != null) {
         await api.startListening(token, next.id);
         await _player.setUrl(next.audioUrl);
-        await _player.play();
+        _unlockController.forward(from: 0);
         _unlockTimer = Timer(const Duration(seconds: 3), () {
           if (mounted) {
             setState(() => _isLocked = false);
           }
         });
+        unawaited(
+          _player.play().catchError((Object _) {
+            // Browsers may block autoplay until the user taps. The listening
+            // ritual still completes visually in the web demo.
+          }),
+        );
       }
     } on SvibeApiException catch (exception) {
       if (mounted) {
@@ -167,6 +181,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (context) {
         return _GoldenVoiceSheet(
@@ -194,15 +209,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
 
   @override
   Widget build(BuildContext context) {
-    final status = ref.watch(userStatusProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Svibe'),
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 14),
+          child: Icon(Icons.graphic_eq),
+        ),
+        title: const Center(child: Text('svibe')),
         actions: [
-          _CastButton(onPressed: widget.onOpenCast),
-          const SizedBox(width: 8),
           _DmButton(onPressed: widget.onOpenDm),
-          const SizedBox(width: 10),
+          const SizedBox(width: 14),
         ],
       ),
       body: SafeArea(
@@ -211,23 +227,18 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           padding: const EdgeInsets.fromLTRB(18, 2, 18, 18),
           child: Column(
             children: [
-              status.when(
-                data: (value) => _StatusRail(status: value),
-                error: (_, __) => const _StatusRail(status: null),
-                loading: () => const _StatusRail(status: null, loading: true),
-              ),
-              const SizedBox(height: 14),
               if (_error != null) _InlineError(message: _error!),
               if (_error != null) const SizedBox(height: 10),
               Expanded(
                 child: _isLoading
                     ? const _FeedSkeleton()
                     : _item == null
-                    ? const _EmptyFeed()
+                    ? _EmptyFeed(onCast: widget.onOpenCast)
                     : _DiscoveryCard(
                         item: _item!,
                         player: _player,
                         waveController: _waveController,
+                        unlockController: _unlockController,
                         isLocked: _isLocked,
                         onLike: () => _swipe('like'),
                         onDislike: () => _swipe('dislike'),
@@ -239,29 +250,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
         ),
       ),
-    );
-  }
-}
-
-class _CastButton extends StatelessWidget {
-  const _CastButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return IconButton.filled(
-      tooltip: 'Cast',
-      onPressed: onPressed,
-      style: IconButton.styleFrom(
-        backgroundColor: theme.colorScheme.onSurface,
-        foregroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.controlRadius),
-        ),
-      ),
-      icon: const Icon(Icons.near_me),
     );
   }
 }
@@ -289,7 +277,7 @@ class _DmButton extends StatelessWidget {
             width: 9,
             height: 9,
             decoration: BoxDecoration(
-              color: theme.extension<SvibeColors>()!.berry,
+              color: theme.colorScheme.onSurface,
               shape: BoxShape.circle,
             ),
           ),
@@ -299,69 +287,12 @@ class _DmButton extends StatelessWidget {
   }
 }
 
-class _StatusRail extends StatelessWidget {
-  const _StatusRail({required this.status, this.loading = false});
-
-  final UserStatus? status;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    final canUpload = status?.canUploadVibe ?? false;
-    final privacy = status?.isPrivate == true ? 'Private' : 'Public';
-    final count = status == null
-        ? '--'
-        : '${status!.dailyVibeCount}/${status!.dailyVibeLimit}';
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.colorScheme.outline),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: canUpload ? colors.berry : colors.lilac,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              canUpload ? Icons.graphic_eq : Icons.hearing,
-              color: Colors.white,
-              size: 17,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              loading ? 'Checking signal' : privacy,
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-          Text(
-            '$count casts',
-            style: TextStyle(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DiscoveryCard extends StatefulWidget {
   const _DiscoveryCard({
     required this.item,
     required this.player,
     required this.waveController,
+    required this.unlockController,
     required this.isLocked,
     required this.onLike,
     required this.onDislike,
@@ -372,6 +303,7 @@ class _DiscoveryCard extends StatefulWidget {
   final VibeFeedItem item;
   final AudioPlayer player;
   final Animation<double> waveController;
+  final Animation<double> unlockController;
   final bool isLocked;
   final VoidCallback onLike;
   final VoidCallback onDislike;
@@ -388,6 +320,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
   VibeFeedItem get item => widget.item;
   AudioPlayer get player => widget.player;
   Animation<double> get waveController => widget.waveController;
+  Animation<double> get unlockController => widget.unlockController;
   bool get isLocked => widget.isLocked;
   VoidCallback get onLike => widget.onLike;
   VoidCallback get onDislike => widget.onDislike;
@@ -403,7 +336,6 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
     final name = item.displayName?.isNotEmpty == true
         ? item.displayName!
         : item.username;
@@ -441,161 +373,204 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
           _resetDrag();
         }
       },
-      child: Column(
-        children: [
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOutCubic,
-              transform: Matrix4.identity()
-                ..translate(_drag.dx, _drag.dy)
-                ..rotateZ(rotation),
-              child: Stack(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      border: Border.all(color: theme.colorScheme.outline),
-                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: theme.brightness == Brightness.dark
-                                ? 0.28
-                                : 0.10,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cardHeight = math.min(constraints.maxHeight, 548.0);
+          final cardWidth = math.min(constraints.maxWidth, 382.0);
+          return Center(
+            child: SizedBox(
+              width: cardWidth,
+              height: cardHeight,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                transform: Matrix4.identity()
+                  ..translate(_drag.dx, _drag.dy)
+                  ..rotateZ(rotation),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: theme.extension<SvibeColors>()!.elevated,
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: .72,
                           ),
-                          blurRadius: 34,
-                          offset: const Offset(0, 22),
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            ProfileAvatar(
-                              username: item.username,
-                              imageUrl: item.profilePictureUrl,
-                              radius: 28,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.cardRadius,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: theme.brightness == Brightness.dark
+                                  ? 0.34
+                                  : 0.10,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  Text(
-                                    '@${item.username} - ${item.duration}s',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (item.isGoldenVoice)
-                              _GoldenChip(color: colors.lime),
-                          ],
-                        ),
-                        const Spacer(),
-                        StreamBuilder<PlayerState>(
-                          stream: player.playerStateStream,
-                          builder: (context, snapshot) {
-                            final playing =
-                                snapshot.data?.playing ?? player.playing;
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(180),
-                              onTap: onTogglePlayback,
-                              child: _WaveStage(
-                                controller: waveController,
-                                active: playing,
-                                golden: item.isGoldenVoice,
-                              ),
-                            );
-                          },
-                        ),
-                        const Spacer(),
-                        Text(
-                          isLocked ? 'Listen' : 'Choose',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
+                            blurRadius: 38,
+                            offset: const Offset(0, 24),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isLocked
-                              ? 'First three seconds: listen before choosing.'
-                              : item.isGoldenVoice
-                              ? 'Golden Voice is awake.'
-                              : 'The voice is yours to read.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w700,
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              ProfileAvatar(
+                                username: item.username,
+                                imageUrl: item.profilePictureUrl,
+                                radius: 26,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                    Text(
+                                      '@${item.username}',
+                                      style: TextStyle(
+                                        color: theme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (item.isGoldenVoice) const _GoldenChip(),
+                              if (!item.isGoldenVoice)
+                                _DurationPill(duration: item.duration),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 18),
-                        _ListenGate(player: player, isLocked: isLocked),
-                        const SizedBox(height: 12),
-                        _ProgressBar(player: player),
-                      ],
-                    ),
-                  ),
-                  if (stamp != null)
-                    Positioned(
-                      top: 92,
-                      left: stamp == _SwipeStampKind.pass ? 24 : null,
-                      right: stamp == _SwipeStampKind.like ? 24 : null,
-                      child: _SwipeStamp(
-                        kind: stamp,
-                        opacity: (_drag.dx.abs() / 120).clamp(0.0, 1.0),
+                          const Spacer(),
+                          StreamBuilder<PlayerState>(
+                            stream: player.playerStateStream,
+                            builder: (context, snapshot) {
+                              final playing =
+                                  snapshot.data?.playing ?? player.playing;
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(180),
+                                onTap: onTogglePlayback,
+                                child: _WaveStage(
+                                  controller: waveController,
+                                  active: playing,
+                                  golden: item.isGoldenVoice,
+                                ),
+                              );
+                            },
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              _InlineSignalIcon(
+                                icon: Icons.close,
+                                enabled: !isLocked,
+                                onTap: onDislike,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  isLocked ? 'LISTENING' : 'SWIPE',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 2.2,
+                                    color:
+                                        theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              _InlineSignalIcon(
+                                icon: Icons.favorite_border,
+                                enabled: !isLocked,
+                                onTap: onLike,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _ProgressBar(player: player),
+                        ],
                       ),
                     ),
-                ],
+                    if (isLocked)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: AnimatedBuilder(
+                            animation: unlockController,
+                            builder: (context, _) {
+                              return CustomPaint(
+                                painter: _CometBorderPainter(
+                                  progress: unlockController.value,
+                                  radius: AppTheme.cardRadius,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    if (stamp != null)
+                      Positioned(
+                        top: 92,
+                        left: stamp == _SwipeStampKind.pass ? 24 : null,
+                        right: stamp == _SwipeStampKind.like ? 24 : null,
+                        child: _SwipeStamp(
+                          kind: stamp,
+                          opacity: (_drag.dx.abs() / 120).clamp(0.0, 1.0),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _SignalButton(
-                icon: Icons.close,
-                enabled: !isLocked,
-                color: theme.colorScheme.surface,
-                foreground: theme.colorScheme.onSurface,
-                border: theme.colorScheme.outline,
-                onTap: onDislike,
-              ),
-              const SizedBox(width: 18),
-              _SignalButton(
-                icon: Icons.favorite,
-                enabled: !isLocked,
-                color: theme.colorScheme.onSurface,
-                foreground: Colors.white,
-                onTap: onLike,
-              ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
 enum _SwipeStampKind { like, pass }
+
+class _DurationPill extends StatelessWidget {
+  const _DurationPill({required this.duration});
+
+  final int duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: .74),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: .72),
+        ),
+      ),
+      child: Text(
+        '0:${duration.toString().padLeft(2, '0')}',
+        style: TextStyle(
+          color: theme.colorScheme.onSurface,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
 
 class _SwipeStamp extends StatelessWidget {
   const _SwipeStamp({required this.kind, required this.opacity});
@@ -605,11 +580,9 @@ class _SwipeStamp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<SvibeColors>()!;
+    final theme = Theme.of(context);
     final isLike = kind == _SwipeStampKind.like;
-    final color = isLike
-        ? colors.berry
-        : Theme.of(context).colorScheme.onSurface;
+    final color = theme.colorScheme.onSurface;
     return Opacity(
       opacity: opacity,
       child: Transform.rotate(
@@ -618,8 +591,8 @@ class _SwipeStamp extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             color: isLike
-                ? colors.berry.withValues(alpha: 0.14)
-                : Theme.of(context).colorScheme.surface,
+                ? theme.colorScheme.onSurface.withValues(alpha: 0.10)
+                : theme.colorScheme.surface,
             border: Border.all(color: color, width: 2),
             borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           ),
@@ -637,77 +610,92 @@ class _SwipeStamp extends StatelessWidget {
   }
 }
 
-class _ListenGate extends StatelessWidget {
-  const _ListenGate({required this.player, required this.isLocked});
+class _CometBorderPainter extends CustomPainter {
+  const _CometBorderPainter({required this.progress, required this.radius});
 
-  final AudioPlayer player;
-  final bool isLocked;
+  final double progress;
+  final double radius;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    return StreamBuilder<Duration>(
-      stream: player.positionStream,
-      builder: (context, snapshot) {
-        final seconds = snapshot.data?.inMilliseconds ?? 0;
-        final progress = (seconds / 3000).clamp(0.0, 1.0);
-        return Column(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: isLocked ? progress : 1,
-                minHeight: 8,
-                color: isLocked ? colors.lilac : colors.berry,
-                backgroundColor: theme.colorScheme.outline,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isLocked ? Icons.hearing : Icons.bolt,
-                  size: 16,
-                  color: isLocked ? colors.lilac : colors.berry,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isLocked ? 'listening gate' : 'choice unlocked',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(1.2),
+      Radius.circular(radius),
     );
+    final path = Path()..addRRect(rrect);
+    final base = Paint()
+      ..color = Colors.white.withValues(alpha: .08)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawPath(path, base);
+
+    final metrics = path.computeMetrics().toList();
+    if (metrics.isEmpty || size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    final metric = metrics.first;
+    final length = metric.length;
+    final head = (progress.clamp(0.0, 1.0) * length) % length;
+    final cometLength = length * .18;
+    final trailPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Colors.transparent, Colors.white],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.2
+      ..color = Colors.white.withValues(alpha: .88);
+
+    void drawSegment(double start, double end) {
+      if (end <= start) {
+        return;
+      }
+      canvas.drawPath(metric.extractPath(start, end), trailPaint);
+    }
+
+    final start = head - cometLength;
+    if (start < 0) {
+      drawSegment(length + start, length);
+      drawSegment(0, head);
+    } else {
+      drawSegment(start, head);
+    }
+
+    final tangent = metric.getTangentForOffset(head);
+    if (tangent != null) {
+      final glow = Paint()
+        ..color = Colors.white.withValues(alpha: .92)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+      canvas.drawCircle(tangent.position, 3.8, glow);
+      canvas.drawCircle(tangent.position, 1.8, Paint()..color = Colors.white);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CometBorderPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.radius != radius;
   }
 }
 
 class _GoldenChip extends StatelessWidget {
-  const _GoldenChip({required this.color});
-
-  final Color color;
+  const _GoldenChip();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        border: Border.all(color: color.withValues(alpha: 0.42)),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .72),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: .72),
+        ),
         borderRadius: BorderRadius.circular(99),
       ),
-      child: const Text(
-        'GOLD',
+      child: Text(
+        'RARE',
         style: TextStyle(
-          color: Color(0xFF151316),
+          color: Theme.of(context).colorScheme.onSurface,
           fontSize: 11,
           fontWeight: FontWeight.w900,
         ),
@@ -729,16 +717,16 @@ class _WaveStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<SvibeColors>()!;
+    final theme = Theme.of(context);
     return Center(
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) {
           return CustomPaint(
-            size: const Size(280, 210),
+            size: const Size(170, 112),
             painter: _WavePainter(
               tick: controller.value,
-              color: golden ? colors.lime : colors.berry,
+              color: theme.colorScheme.onSurface,
               active: active,
             ),
           );
@@ -764,15 +752,17 @@ class _WavePainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = 5;
+      ..strokeWidth = 4.2;
     final center = size.height / 2;
-    const bars = 29;
+    const bars = 17;
     final gap = size.width / (bars - 1);
     for (var i = 0; i < bars; i++) {
       final pulse = active
           ? math.sin((tick * math.pi * 2) + i * .72).abs()
-          : .2;
-      final height = 20 + pulse * (i.isEven ? 92 : 72);
+          : .38;
+      final distance = (i - (bars - 1) / 2).abs();
+      final envelope = 1 - (distance / ((bars - 1) / 2)) * .58;
+      final height = 22 + pulse * 52 * envelope;
       final x = i * gap;
       canvas.drawLine(
         Offset(x, center - height / 2),
@@ -811,8 +801,9 @@ class _ProgressBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(99),
           child: LinearProgressIndicator(
             value: progress,
-            minHeight: 8,
-            backgroundColor: theme.colorScheme.outline,
+            minHeight: 3,
+            color: theme.colorScheme.onSurface.withValues(alpha: .62),
+            backgroundColor: theme.colorScheme.outline.withValues(alpha: .42),
           ),
         );
       },
@@ -820,52 +811,27 @@ class _ProgressBar extends StatelessWidget {
   }
 }
 
-class _SignalButton extends StatelessWidget {
-  const _SignalButton({
+class _InlineSignalIcon extends StatelessWidget {
+  const _InlineSignalIcon({
     required this.icon,
     required this.enabled,
-    required this.color,
-    required this.foreground,
     required this.onTap,
-    this.border,
   });
 
   final IconData icon;
   final bool enabled;
-  final Color color;
-  final Color foreground;
-  final Color? border;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(99),
-      onTap: enabled ? onTap : null,
-      child: AnimatedOpacity(
-        opacity: enabled ? 1 : .38,
-        duration: const Duration(milliseconds: 180),
-        child: Container(
-          width: 68,
-          height: 68,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: border == null ? null : Border.all(color: border!),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: Theme.of(context).brightness == Brightness.dark
-                      ? 0.20
-                      : 0.08,
-                ),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Icon(icon, color: foreground, size: 30),
-        ),
+    final color = Theme.of(context).colorScheme.onSurface;
+    return IconButton(
+      tooltip: enabled ? null : 'Listen first',
+      onPressed: enabled ? onTap : null,
+      icon: Icon(
+        icon,
+        color: color.withValues(alpha: enabled ? .88 : .28),
+        size: 30,
       ),
     );
   }
@@ -917,33 +883,65 @@ class _FeedSkeleton extends StatelessWidget {
 }
 
 class _EmptyFeed extends StatelessWidget {
-  const _EmptyFeed();
+  const _EmptyFeed({required this.onCast});
+
+  final VoidCallback onCast;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.radar, size: 48),
-            const SizedBox(height: 14),
-            Text(
-              'No public voices yet',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'New public vibes will flow here one by one.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+        padding: const EdgeInsets.all(8),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(26, 34, 26, 28),
+          decoration: BoxDecoration(
+            color: theme.extension<SvibeColors>()!.elevated,
+            border: Border.all(color: theme.colorScheme.outline),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: theme.colorScheme.outline),
+                ),
+                child: Icon(
+                  Icons.graphic_eq,
+                  size: 42,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 18),
+              Text(
+                'No public voices yet',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The feed will stay quiet until public vibes are ready.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.32,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: onCast,
+                icon: const Icon(Icons.mic_external_on),
+                label: const Text('Cast first signal'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1013,29 +1011,50 @@ class _GoldenVoiceSheetState extends State<_GoldenVoiceSheet> {
     final theme = Theme.of(context);
     final colors = theme.extension<SvibeColors>()!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 28),
+      padding: EdgeInsets.fromLTRB(
+        22,
+        10,
+        22,
+        28 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: 8),
+          const _GoldenRitualCard(),
+          const SizedBox(height: 24),
           Text(
-            'Shake your vibe',
+            'shake to unlock connection',
+            textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Golden Voice found. Shake the phone to unlock your signal.',
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            'Rare voice found. Shake your phone, or use the manual fallback.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 22),
-          _GoldenRitualCard(color: colors.orange),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: _isUnlocking ? null : _unlock,
-            icon: const Icon(Icons.graphic_eq),
-            label: Text(_isUnlocking ? 'Unlocking...' : 'Unlock manually'),
+            icon: const Icon(Icons.vibration),
+            label: Text(_isUnlocking ? 'Unlocking...' : 'Tap to unlock'),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Manual unlock keeps the ritual accessible on every device.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: colors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -1044,18 +1063,16 @@ class _GoldenVoiceSheetState extends State<_GoldenVoiceSheet> {
 }
 
 class _GoldenRitualCard extends StatelessWidget {
-  const _GoldenRitualCard({required this.color});
-
-  final Color color;
+  const _GoldenRitualCard();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 184,
+      height: 260,
       decoration: BoxDecoration(
-        color: color,
+        color: Theme.of(context).extension<SvibeColors>()!.elevated,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: Border.all(color: Colors.black, width: 2),
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -1065,21 +1082,43 @@ class _GoldenRitualCard extends StatelessWidget {
             width: 96,
             height: 96,
             decoration: BoxDecoration(
-              color: AppTheme.ink,
+              color: Theme.of(context).colorScheme.surface,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.onSurface,
+                width: 1.4,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .16),
+                  blurRadius: 34,
+                  spreadRadius: 2,
+                ),
+              ],
             ),
-            child: Icon(Icons.vibration, size: 46, color: color),
+            child: Icon(
+              Icons.vibration,
+              size: 46,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           Positioned(
-            right: 24,
-            top: 24,
-            child: Icon(Icons.auto_awesome, color: AppTheme.ink),
+            right: 28,
+            top: 28,
+            child: Icon(
+              Icons.graphic_eq,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           Positioned(
-            left: 24,
-            bottom: 24,
-            child: Icon(Icons.auto_awesome, color: AppTheme.ink),
+            left: 28,
+            bottom: 28,
+            child: Icon(
+              Icons.graphic_eq,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -1091,9 +1130,9 @@ class _GoldenRitualPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppTheme.ink.withValues(alpha: 0.18)
+      ..color = Colors.white.withValues(alpha: 0.08)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     for (var i = 0; i < 4; i++) {
       final inset = 18.0 + i * 22;
@@ -1170,7 +1209,7 @@ class _ProfilePreview extends StatelessWidget {
               Expanded(
                 child: _MiniStat(
                   label: 'signal',
-                  value: item.isGoldenVoice ? 'Gold' : 'Public',
+                  value: item.isGoldenVoice ? 'Rare' : 'Public',
                 ),
               ),
             ],

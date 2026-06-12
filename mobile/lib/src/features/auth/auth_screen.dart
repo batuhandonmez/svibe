@@ -34,139 +34,165 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         .toDouble();
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: SizedBox(
-              width: contentWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _BrandLockup(colors: colors),
-                  const SizedBox(height: 34),
-                  Text(
-                    _isRegister ? 'Find your signal' : 'Welcome back',
-                    style: theme.textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      height: 0.98,
-                      letterSpacing: 0,
+      body: Container(
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          boxShadow: [
+            BoxShadow(
+              color: colors.elevated.withValues(alpha: .18),
+              blurRadius: 160,
+              spreadRadius: 18,
+              offset: const Offset(0, -120),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 42, 24, 24),
+            child: Center(
+              child: SizedBox(
+                width: contentWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: _BrandLockup(colors: colors)),
+                    const SizedBox(height: 44),
+                    Text(
+                      _isRegister ? 'Find your signal' : 'Welcome back',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                        letterSpacing: 0,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _isRegister
-                        ? 'Pick a name and start listening.'
-                        : 'Listen first. Speak when your signal opens.',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.35,
+                    const SizedBox(height: 10),
+                    Text(
+                      _isRegister
+                          ? 'Pick a name and start listening.'
+                          : 'Listen first. Speak when your signal opens.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        height: 1.35,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 26),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: colors.elevated,
-                      border: Border.all(color: colors.border),
-                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _AuthModeButton(
-                            label: 'Log in',
-                            selected: !_isRegister,
-                            onTap: auth.isLoading
-                                ? null
-                                : () => setState(() => _isRegister = false),
-                          ),
+                    const SizedBox(height: 26),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: colors.elevated.withValues(alpha: .74),
+                        border: Border.all(
+                          color: colors.border.withValues(alpha: .8),
                         ),
-                        Expanded(
-                          child: _AuthModeButton(
-                            label: 'Create',
-                            selected: _isRegister,
-                            onTap: auth.isLoading
-                                ? null
-                                : () => setState(() => _isRegister = true),
-                          ),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.cardRadius,
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-                    decoration: BoxDecoration(
-                      color: colors.elevated,
-                      border: Border.all(color: colors.border),
-                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                      boxShadow: [
-                        if (!isDark)
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.07),
-                            blurRadius: 30,
-                            offset: const Offset(0, 18),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _AuthModeButton(
+                              label: 'Log in',
+                              selected: !_isRegister,
+                              onTap: auth.isLoading
+                                  ? null
+                                  : () => setState(() => _isRegister = false),
+                            ),
                           ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: _username,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: const [AutofillHints.username],
-                          decoration: const InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.alternate_email),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _password,
-                          obscureText: true,
-                          autofillHints: const [AutofillHints.password],
-                          decoration: const InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: Icon(Icons.lock_outline),
-                          ),
-                        ),
-                        if (auth.error != null) ...[
-                          const SizedBox(height: 14),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              auth.error!,
-                              style: TextStyle(
-                                color: theme.colorScheme.error,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          Expanded(
+                            child: _AuthModeButton(
+                              label: 'Create',
+                              selected: _isRegister,
+                              onTap: auth.isLoading
+                                  ? null
+                                  : () => setState(() => _isRegister = true),
                             ),
                           ),
                         ],
-                        const SizedBox(height: 18),
-                        FilledButton(
-                          onPressed: auth.isLoading ? null : _submit,
-                          child: auth.isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(_isRegister ? 'Create account' : 'Log in'),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  _DemoHint(
-                    colors: colors,
-                    enabled: !auth.isLoading,
-                    onTap: _loginDemo,
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                      decoration: BoxDecoration(
+                        color: colors.elevated.withValues(alpha: .88),
+                        border: Border.all(
+                          color: colors.border.withValues(alpha: .8),
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.cardRadius,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: isDark ? 0.22 : 0.07,
+                            ),
+                            blurRadius: 32,
+                            offset: const Offset(0, 18),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _username,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.username],
+                            decoration: const InputDecoration(
+                              labelText: 'Username',
+                              prefixIcon: Icon(Icons.alternate_email),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _password,
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.password],
+                            decoration: const InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: Icon(Icons.lock_outline),
+                            ),
+                          ),
+                          if (auth.error != null) ...[
+                            const SizedBox(height: 14),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                auth.error!,
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 18),
+                          FilledButton(
+                            onPressed: auth.isLoading ? null : _submit,
+                            child: auth.isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    _isRegister ? 'Create account' : 'Log in',
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _DemoHint(
+                      colors: colors,
+                      enabled: !auth.isLoading,
+                      onTap: _loginDemo,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -207,29 +233,35 @@ class _BrandLockup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Column(
       children: [
         Container(
-          width: 54,
-          height: 54,
+          width: 58,
+          height: 58,
           decoration: BoxDecoration(
-            color: colors.berry,
-            borderRadius: BorderRadius.circular(16),
+            color: colors.elevated,
+            borderRadius: BorderRadius.circular(AppTheme.controlRadius),
+            border: Border.all(color: colors.border),
             boxShadow: [
               BoxShadow(
-                color: colors.berry.withValues(alpha: 0.24),
-                blurRadius: 22,
+                color: Colors.black.withValues(alpha: 0.24),
+                blurRadius: 26,
                 offset: const Offset(0, 12),
               ),
             ],
           ),
-          child: const Icon(Icons.graphic_eq, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.graphic_eq,
+            color: theme.colorScheme.onSurface,
+            size: 29,
+          ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(height: 14),
         Text(
-          'Svibe',
+          'svibe',
           style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w900,
+            letterSpacing: -.4,
           ),
         ),
       ],
@@ -258,7 +290,9 @@ class _AuthModeButton extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.onSurface : Colors.transparent,
+          color: selected
+              ? theme.colorScheme.onSurface.withValues(alpha: .92)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.controlRadius),
         ),
         child: Text(

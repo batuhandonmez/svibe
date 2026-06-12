@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -11,7 +12,6 @@ import 'package:record/record.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/svibe_models.dart';
-import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
 
 class DmInboxScreen extends ConsumerStatefulWidget {
@@ -45,102 +45,231 @@ class _DmInbox extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
-    final token = auth.token;
-    final theme = Theme.of(context);
+    final token = ref.watch(authControllerProvider).token;
     return Scaffold(
-      appBar: AppBar(title: const Text('DM')),
-      body: token == null
-          ? const Center(child: Text('Log in to see messages.'))
-          : FutureBuilder<List<DmThread>>(
-              future: ref.read(apiClientProvider).dmThreads(token),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return _DmError(message: snapshot.error.toString());
-                }
-                final threads = snapshot.data ?? [];
-                if (threads.isEmpty) {
-                  return _EmptyDm(theme: theme);
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
-                  itemCount: threads.length + 1,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return _InboxHeader(theme: theme);
-                    }
-                    final thread = threads[index - 1];
-                    return _ThreadTile(
-                      thread: thread,
-                      onTap: () => onThreadSelected(thread),
-                    );
-                  },
-                );
-              },
+      backgroundColor: const Color(0xFF111111),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _InboxTopBar(onBack: () => Navigator.of(context).maybePop()),
+            Expanded(
+              child: token == null
+                  ? const _CenteredMessage(message: 'Log in to see messages.')
+                  : FutureBuilder<List<DmThread>>(
+                      future: ref.read(apiClientProvider).dmThreads(token),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return _CenteredMessage(
+                            message: snapshot.error.toString(),
+                          );
+                        }
+                        final threads = snapshot.data ?? [];
+                        if (threads.isEmpty) {
+                          return const _EmptyDm();
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(22, 12, 22, 26),
+                          itemCount: threads.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index == 0) {
+                              return const Padding(
+                                padding: EdgeInsets.only(bottom: 20),
+                                child: _SearchField(),
+                              );
+                            }
+                            final thread = threads[index - 1];
+                            return _ThreadTile(
+                              thread: thread,
+                              unread: index == 1,
+                              onTap: () => onThreadSelected(thread),
+                            );
+                          },
+                        );
+                      },
+                    ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _ThreadTile extends ConsumerWidget {
-  const _ThreadTile({required this.thread, required this.onTap});
+class _InboxTopBar extends StatelessWidget {
+  const _InboxTopBar({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 76,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFF211F1F))),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Back',
+            onPressed: onBack,
+            icon: const Icon(
+              Icons.arrow_back,
+              color: Color(0xFFEDEAE4),
+              size: 28,
+            ),
+          ),
+          const Expanded(
+            child: Text(
+              'Messages',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFFF3F0EA),
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'New message',
+            onPressed: () {},
+            icon: const Icon(
+              Icons.edit_square,
+              color: Color(0xFFEDEAE4),
+              size: 27,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchField extends StatelessWidget {
+  const _SearchField();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF232222),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF302E2D)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.search, color: Color(0xFFC9C5BE), size: 28),
+          SizedBox(width: 12),
+          Text(
+            'Search conversations...',
+            style: TextStyle(
+              color: Color(0xFF8F8A84),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThreadTile extends StatelessWidget {
+  const _ThreadTile({
+    required this.thread,
+    required this.unread,
+    required this.onTap,
+  });
 
   final DmThread thread;
+  final bool unread;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final peerName = thread.peer.displayName?.isNotEmpty == true
-        ? thread.peer.displayName!
-        : thread.peer.username;
-    final preview = thread.lastMessage?.text ?? 'No messages yet';
-    final colors = theme.extension<SvibeColors>()!;
+  Widget build(BuildContext context) {
+    final peerName = _peerName(thread.peer);
+    final last = thread.lastMessage;
+    final hasAudio = last?.audioUrl?.isNotEmpty == true;
+    final preview = hasAudio ? 'Sent a vibe' : last?.text ?? 'No messages yet';
     return InkWell(
-      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _DmAvatar(peer: thread.peer, compact: false),
-            const SizedBox(width: 14),
+            _DmAvatar(peer: thread.peer, radius: 28),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     peerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
+                      color: Color(0xFFE8E4DE),
+                      fontSize: 20,
                       fontWeight: FontWeight.w900,
-                      fontSize: 17,
                     ),
                   ),
                   const SizedBox(height: 5),
-                  Text(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      if (hasAudio) ...[
+                        const _TinyWaveIcon(),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: Text(
+                          preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFB8B3AD),
+                            fontSize: 15,
+                            height: 1.25,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            SizedBox(
-              width: 54,
-              height: 32,
-              child: CustomPaint(painter: _DmWavePainter(color: colors.berry)),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _relativeTime(thread.updatedAt),
+                  style: const TextStyle(
+                    color: Color(0xFFBDB8B1),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (unread)
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE7E4DE),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -382,69 +511,135 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
-    final theme = Theme.of(context);
-    final peerName = widget.thread.peer.displayName?.isNotEmpty == true
-        ? widget.thread.peer.displayName!
-        : widget.thread.peer.username;
+    final peerName = _peerName(widget.thread.peer);
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back',
-          onPressed: widget.onBack,
-          icon: const Icon(Icons.arrow_back),
-        ),
-        title: Row(
+      backgroundColor: const Color(0xFF111111),
+      body: SafeArea(
+        child: Column(
           children: [
-            _DmAvatar(peer: widget.thread.peer, compact: true),
-            const SizedBox(width: 10),
-            Expanded(child: Text(peerName)),
+            _ConversationTopBar(onBack: widget.onBack),
+            _ConversationHeader(peer: widget.thread.peer, peerName: peerName),
+            Expanded(
+              child: FutureBuilder<List<DmMessage>>(
+                future: _messagesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final messages = snapshot.data ?? [];
+                  if (messages.isEmpty) {
+                    return const _EmptyConversation();
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(28, 26, 28, 26),
+                    itemCount: messages.length + 1,
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return const _DateDivider(label: 'TODAY, 2:45 PM');
+                      }
+                      final message = messages[index - 1];
+                      return _MessageBubble(
+                        message: message,
+                        mine: message.senderId == auth.user?.id,
+                        playing: _playingMessageId == message.id,
+                        onPlayAudio: () => _toggleAudioPlayback(message),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            _MessageComposer(
+              controller: _controller,
+              isRecording: _isRecording,
+              recordSeconds: _recordSeconds,
+              isSendingAudio: _isSendingAudio,
+              onVoiceTap: _toggleVoiceDm,
+              onSend: _send,
+            ),
           ],
         ),
       ),
-      body: Column(
+    );
+  }
+}
+
+class _ConversationTopBar extends StatelessWidget {
+  const _ConversationTopBar({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 76,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFF211F1F))),
+      ),
+      child: Row(
         children: [
-          _ThreadSignalHeader(thread: widget.thread),
-          Expanded(
-            child: FutureBuilder<List<DmMessage>>(
-              future: _messagesFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final messages = snapshot.data ?? [];
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'First whisper is still waiting.',
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return _MessageBubble(
-                      message: message,
-                      mine: message.senderId == auth.user?.id,
-                      playing: _playingMessageId == message.id,
-                      onPlayAudio: () => _toggleAudioPlayback(message),
-                    );
-                  },
-                );
-              },
+          IconButton(
+            tooltip: 'Back',
+            onPressed: onBack,
+            icon: const Icon(Icons.menu, color: Color(0xFFD9D5CF), size: 28),
+          ),
+          const Expanded(
+            child: Text(
+              'svibe',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFFF2EFE8),
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
-          _MessageComposer(
-            controller: _controller,
-            isRecording: _isRecording,
-            recordSeconds: _recordSeconds,
-            isSendingAudio: _isSendingAudio,
-            onVoiceTap: _toggleVoiceDm,
-            onSend: _send,
+          const Icon(
+            Icons.chat_bubble_outline,
+            color: Color(0xFFD9D5CF),
+            size: 28,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConversationHeader extends StatelessWidget {
+  const _ConversationHeader({required this.peer, required this.peerName});
+
+  final DmPeer peer;
+  final String peerName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 26, 22, 28),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFF1E1C1C))),
+      ),
+      child: Column(
+        children: [
+          _DmAvatar(peer: peer, radius: 48),
+          const SizedBox(height: 14),
+          Text(
+            peerName,
+            style: const TextStyle(
+              color: Color(0xFFF1EEE8),
+              fontSize: 23,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Active now',
+            style: TextStyle(
+              color: Color(0xFFC6C0B9),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -471,69 +666,90 @@ class _MessageComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    return SafeArea(
-      top: false,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-        decoration: BoxDecoration(
-          color: colors.elevated,
-          border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(
-                alpha: theme.brightness == Brightness.dark ? 0.24 : 0.08,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Attach',
+            onPressed: () {},
+            icon: const Icon(Icons.add, color: Color(0xFFD5D0C8), size: 30),
+          ),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              minLines: 1,
+              maxLines: 3,
+              style: const TextStyle(color: Color(0xFFEDEAE4), fontSize: 16),
+              decoration: InputDecoration(
+                hintText: isRecording
+                    ? 'Recording ${recordSeconds}s'
+                    : 'Type a message...',
+                hintStyle: const TextStyle(color: Color(0xFF77716C)),
+                enabledBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF2A2827)),
+                ),
+                focusedBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFFE0DCD4)),
+                ),
               ),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+              onSubmitted: (_) => onSend(),
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Voice DM',
-              onPressed: isSendingAudio ? null : onVoiceTap,
-              icon: isSendingAudio
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
+          ),
+          const SizedBox(width: 12),
+          InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: isSendingAudio ? null : onVoiceTap,
+            onLongPress: onSend,
+            child: Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3A3836),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .24),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: isSendingAudio
+                  ? const Padding(
+                      padding: EdgeInsets.all(18),
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(isRecording ? Icons.stop_circle_outlined : Icons.mic),
+                  : Icon(
+                      isRecording ? Icons.stop : Icons.mic,
+                      color: const Color(0xFFE8E4DE),
+                      size: 28,
+                    ),
             ),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                minLines: 1,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: isRecording
-                      ? 'Recording ${recordSeconds}s'
-                      : 'Send a quiet signal',
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-                ),
-                onSubmitted: (_) => onSend(),
-              ),
-            ),
-            const SizedBox(width: 6),
-            FilledButton(
-              onPressed: onSend,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                padding: EdgeInsets.zero,
-                shape: const CircleBorder(),
-              ),
-              child: const Icon(Icons.near_me),
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DateDivider extends StatelessWidget {
+  const _DateDivider({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Color(0xFF807A74),
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 2,
         ),
       ),
     );
@@ -555,258 +771,140 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
+    final audio = message.audioUrl?.isNotEmpty == true;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 300),
+        constraints: const BoxConstraints(maxWidth: 320),
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
+        padding: audio
+            ? const EdgeInsets.fromLTRB(12, 10, 14, 10)
+            : const EdgeInsets.fromLTRB(16, 13, 16, 13),
         decoration: BoxDecoration(
-          color: mine ? theme.colorScheme.onSurface : colors.elevated,
-          border: Border.all(
-            color: mine ? Colors.transparent : theme.colorScheme.outline,
-          ),
+          color: mine ? const Color(0xFF3A3837) : const Color(0xFF232222),
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(24),
-            topRight: const Radius.circular(24),
-            bottomLeft: Radius.circular(mine ? 24 : 8),
-            bottomRight: Radius.circular(mine ? 8 : 24),
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(mine ? 18 : 4),
+            bottomRight: Radius.circular(mine ? 4 : 18),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: mine
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 118,
-              height: 26,
-              child: CustomPaint(
-                painter: _DmWavePainter(
-                  color: mine ? Colors.white : colors.berry,
-                  dense: true,
-                ),
-              ),
-            ),
-            const SizedBox(height: 7),
-            if (message.audioUrl != null)
-              InkWell(
-                borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        child: audio
+            ? InkWell(
+                borderRadius: BorderRadius.circular(16),
                 onTap: onPlayAudio,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      playing ? Icons.pause : Icons.play_arrow,
-                      color: mine ? Colors.white : colors.berry,
-                      size: 20,
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF31302F),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        playing ? Icons.pause : Icons.play_arrow,
+                        color: const Color(0xFFECE8E0),
+                      ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      playing ? 'Playing voice' : 'Play voice',
+                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 76,
+                      height: 36,
+                      child: CustomPaint(painter: _AudioBubbleWavePainter()),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      '0:42',
                       style: TextStyle(
-                        color: mine
-                            ? Colors.white
-                            : theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.w900,
+                        color: Color(0xFFDAD5CE),
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
                 ),
               )
-            else
-              Text(
+            : Text(
                 message.text ?? '',
-                style: TextStyle(
-                  color: mine ? Colors.white : theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.w800,
+                style: const TextStyle(
+                  color: Color(0xFFEDE9E3),
+                  fontSize: 17,
+                  height: 1.42,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ThreadSignalHeader extends StatelessWidget {
-  const _ThreadSignalHeader({required this.thread});
-
-  final DmThread thread;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          border: Border.all(color: theme.colorScheme.outline),
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.graphic_eq, color: theme.colorScheme.surface),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Private signal',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Permission-aware, voice-first thread',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
 }
 
 class _DmAvatar extends StatelessWidget {
-  const _DmAvatar({required this.peer, required this.compact});
+  const _DmAvatar({required this.peer, required this.radius});
 
   final DmPeer peer;
-  final bool compact;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
-    final radius = compact ? 18.0 : 24.0;
     final initial = peer.username.isEmpty
         ? 'S'
         : peer.username[0].toUpperCase();
     if (peer.profilePictureUrl != null && peer.profilePictureUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: radius,
+        backgroundColor: const Color(0xFF222120),
         backgroundImage: NetworkImage(peer.profilePictureUrl!),
       );
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: Theme.of(context).extension<SvibeColors>()!.berry,
+      backgroundColor: const Color(0xFF2D2B2A),
       child: Text(
         initial,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: const Color(0xFFEAE6DE),
           fontWeight: FontWeight.w900,
+          fontSize: radius * .72,
         ),
       ),
     );
   }
 }
 
-class _InboxHeader extends StatelessWidget {
-  const _InboxHeader({required this.theme});
-
-  final ThemeData theme;
+class _TinyWaveIcon extends StatelessWidget {
+  const _TinyWaveIcon();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Direct signals',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 74,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: theme.extension<SvibeColors>()!.elevated,
-              border: Border.all(color: theme.colorScheme.outline),
-              borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: CustomPaint(
-                    painter: _DmWavePainter(
-                      color: theme.extension<SvibeColors>()!.berry,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Icon(
-                  Icons.lock_outline,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return const SizedBox(
+      width: 18,
+      height: 18,
+      child: CustomPaint(painter: _MiniWavePainter()),
     );
   }
 }
 
 class _EmptyDm extends StatelessWidget {
-  const _EmptyDm({required this.theme});
-
-  final ThemeData theme;
+  const _EmptyDm();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.markunread_mailbox_outlined, size: 46),
-            const SizedBox(height: 14),
-            Text(
-              'No private signals',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'When a profile accepts DM, the thread appears here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const _CenteredMessage(message: 'No active conversations.');
   }
 }
 
-class _DmError extends StatelessWidget {
-  const _DmError({required this.message});
+class _EmptyConversation extends StatelessWidget {
+  const _EmptyConversation();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _CenteredMessage(message: 'Start the conversation.');
+  }
+}
+
+class _CenteredMessage extends StatelessWidget {
+  const _CenteredMessage({required this.message});
 
   final String message;
 
@@ -814,42 +912,87 @@ class _DmError extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Text(message, textAlign: TextAlign.center),
+        padding: const EdgeInsets.all(28),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFFB9B4AD),
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
 }
 
-class _DmWavePainter extends CustomPainter {
-  const _DmWavePainter({required this.color, this.dense = false});
-
-  final Color color;
-  final bool dense;
+class _MiniWavePainter extends CustomPainter {
+  const _MiniWavePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
+      ..color = const Color(0xFFDCD8D0)
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = dense ? 3 : 4;
-    final bars = dense ? 14 : 18;
-    final center = size.height / 2;
-    for (var i = 0; i < bars; i++) {
-      final ratio = i / (bars - 1);
-      final wave = (0.35 + (i % 5) * 0.15).clamp(0.0, 1.0);
-      final h = size.height * (0.24 + wave * 0.58);
-      final x = ratio * size.width;
+      ..strokeWidth = 2;
+    for (var i = 0; i < 5; i++) {
+      final x = size.width * (.15 + i * .18);
+      final h = size.height * (.32 + (i % 3) * .18);
       canvas.drawLine(
-        Offset(x, center - h / 2),
-        Offset(x, center + h / 2),
+        Offset(x, size.height / 2 - h / 2),
+        Offset(x, size.height / 2 + h / 2),
         paint,
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DmWavePainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.dense != dense;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _AudioBubbleWavePainter extends CustomPainter {
+  const _AudioBubbleWavePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFDCD8D0)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.4;
+    const bars = 15;
+    for (var i = 0; i < bars; i++) {
+      final phase = i / (bars - 1);
+      final h = size.height * (.22 + math.sin(math.pi * phase) * .62);
+      final x = phase * size.width;
+      canvas.drawLine(
+        Offset(x, size.height / 2 - h / 2),
+        Offset(x, size.height / 2 + h / 2),
+        paint,
+      );
+    }
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+String _peerName(DmPeer peer) {
+  return peer.displayName?.trim().isNotEmpty == true
+      ? peer.displayName!.trim()
+      : peer.username;
+}
+
+String _relativeTime(DateTime time) {
+  final diff = DateTime.now().difference(time);
+  if (diff.inMinutes < 60) {
+    return '${math.max(1, diff.inMinutes)}m';
+  }
+  if (diff.inHours < 24) {
+    return '${diff.inHours}h';
+  }
+  if (diff.inDays < 7) {
+    return '${diff.inDays}d';
+  }
+  return '${time.month}/${time.day}';
 }

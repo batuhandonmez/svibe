@@ -1,38 +1,38 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const ink = Color(0xFF151316);
-  static const night = Color(0xFF0E0F11);
-  static const berry = Color(0xFFE24B5F);
-  static const blue = Color(0xFF2F6F8F);
-  static const lime = Color(0xFFC8B56A);
-  static const lilac = Color(0xFF706A8A);
-  static const orange = Color(0xFFB8794D);
-  static const cardRadius = 18.0;
-  static const controlRadius = 16.0;
+  static const ink = Color(0xFF111113);
+  static const night = Color(0xFF0A0A0B);
+  static const berry = Color(0xFFC9C2B8);
+  static const blue = Color(0xFF7C8791);
+  static const lime = Color(0xFFE2DED6);
+  static const lilac = Color(0xFF8E8A86);
+  static const orange = Color(0xFFB7AFA5);
+  static const cardRadius = 12.0;
+  static const controlRadius = 12.0;
   static const pillRadius = 999.0;
 
   static ThemeData light() {
     return _theme(
       brightness: Brightness.light,
-      scaffold: const Color(0xFFF7F4EF),
-      surface: const Color(0xFFFFFCF8),
+      scaffold: const Color(0xFFF8F6F3),
+      surface: const Color(0xFFFFFEFC),
       elevated: Colors.white,
       text: ink,
-      muted: const Color(0xFF77716C),
-      border: const Color(0xFFE1DAD2),
+      muted: const Color(0xFF6F6A66),
+      border: const Color(0xFFE4DED8),
     );
   }
 
   static ThemeData dark() {
     return _theme(
       brightness: Brightness.dark,
-      scaffold: const Color(0xFF0B0B0D),
-      surface: const Color(0xFF141417),
-      elevated: const Color(0xFF1D1D21),
+      scaffold: night,
+      surface: const Color(0xFF121214),
+      elevated: const Color(0xFF1A1A1D),
       text: const Color(0xFFF6F2EA),
-      muted: const Color(0xFFA29C94),
-      border: const Color(0xFF2D2B2E),
+      muted: const Color(0xFFA39F98),
+      border: const Color(0xFF2A292C),
     );
   }
 
@@ -47,13 +47,13 @@ class AppTheme {
   }) {
     final scheme =
         ColorScheme.fromSeed(
-          seedColor: berry,
+          seedColor: const Color(0xFF8E8A84),
           brightness: brightness,
           surface: surface,
         ).copyWith(
-          primary: berry,
+          primary: text,
           secondary: blue,
-          tertiary: lime,
+          tertiary: const Color(0xFFE2DED6),
           surface: surface,
           outline: border,
           onSurface: text,
@@ -108,13 +108,13 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(controlRadius),
-          borderSide: const BorderSide(color: berry, width: 1.2),
+          borderSide: BorderSide(color: text, width: 1.2),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: berry,
-          foregroundColor: Colors.white,
+          backgroundColor: text,
+          foregroundColor: surface,
           minimumSize: const Size.fromHeight(54),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(controlRadius),

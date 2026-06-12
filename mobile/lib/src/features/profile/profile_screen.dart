@@ -9,6 +9,8 @@ import '../../core/models/svibe_models.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_controller.dart';
 import '../auth/auth_controller.dart';
+import '../cast/cast_screen.dart';
+import '../dm/dm_screen.dart';
 import '../feed/feed_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -46,31 +48,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final auth = ref.watch(authControllerProvider);
     final status = ref.watch(userStatusProvider);
     final user = auth.user;
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    final themeMode = ref.watch(themeControllerProvider).mode;
     final displayName = user?.displayName?.isNotEmpty == true
         ? user!.displayName!
         : user?.username ?? 'Svibe';
 
     return Scaffold(
+      backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
-        title: const Text('Profile'),
+        backgroundColor: const Color(0xFF111111),
+        leading: IconButton(
+          tooltip: 'Log out',
+          onPressed: () => ref.read(authControllerProvider).logout(),
+          icon: const Icon(Icons.menu),
+        ),
+        title: const Center(child: Text('svibe')),
         actions: [
           IconButton(
-            tooltip: 'Refresh vibes',
-            onPressed: _refreshVibes,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Edit profile',
-            onPressed: user == null ? null : () => _showEditProfile(user),
-            icon: const Icon(Icons.edit_outlined),
-          ),
-          IconButton(
-            tooltip: 'Log out',
-            onPressed: () => ref.read(authControllerProvider).logout(),
-            icon: const Icon(Icons.logout),
+            tooltip: 'Messages',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DmInboxScreen()),
+            ),
+            icon: const Icon(Icons.chat_bubble_outline),
           ),
           const SizedBox(width: 8),
         ],
@@ -78,7 +76,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: RefreshIndicator(
         onRefresh: () async => _refreshVibes(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 4, 18, 110),
+          padding: const EdgeInsets.fromLTRB(26, 32, 26, 132),
           children: [
             _ProfileHeader(
               username: user?.username ?? 'svibe',
@@ -90,50 +88,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               status: status.asData?.value,
               onPhotoTap: _pickAndUploadPhoto,
               onEditTap: user == null ? null : () => _showEditProfile(user),
+              onSettingsTap: () => _showSettingsSheet(status.asData?.value),
             ),
-            const SizedBox(height: 18),
-            _SettingsPanel(
-              isPrivate: status.asData?.value?.isPrivate ?? false,
-              messagePrivacy:
-                  status.asData?.value?.messagePrivacy ?? 'everyone',
-              themeMode: themeMode,
-              onPrivacyChanged: _setPrivacy,
-              onDmChanged: _setDmPrivacy,
-              onThemeModeChanged: (value) =>
-                  ref.read(themeControllerProvider).setMode(value),
-            ),
-            const SizedBox(height: 26),
-            Row(
+            const SizedBox(height: 46),
+            const Row(
               children: [
+                Icon(Icons.graphic_eq, color: Color(0xFFE8E4DE), size: 24),
+                SizedBox(width: 12),
                 Text(
-                  'Vibes',
-                  style: theme.textTheme.titleLarge?.copyWith(
+                  'Recent Archives',
+                  style: TextStyle(
+                    color: Color(0xFFF0ECE6),
+                    fontSize: 24,
                     fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.elevated,
-                    border: Border.all(color: colors.border),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text(
-                    'public signal',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
-                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 22),
             FutureBuilder<List<VibeFeedItem>>(
               future: _vibesFuture,
               builder: (context, snapshot) {
@@ -145,9 +117,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 }
                 final vibes = snapshot.data ?? [];
                 if (vibes.isEmpty) {
-                  return _EmptyVibes(onCastHint: () {});
+                  return _EmptyVibes(
+                    onCastHint: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const CastScreen(),
+                      ),
+                    ),
+                  );
                 }
-                return _VibeGrid(vibes: vibes);
+                return _RecentArchiveList(vibes: vibes);
               },
             ),
           ],
@@ -195,6 +173,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     ref.read(authControllerProvider).replaceUser(updated);
     ref.invalidate(userStatusProvider);
+  }
+
+  Future<void> _showSettingsSheet(UserStatus? status) async {
+    final themeMode = ref.read(themeControllerProvider).mode;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: _SettingsPanel(
+          isPrivate: status?.isPrivate ?? false,
+          messagePrivacy: status?.messagePrivacy ?? 'everyone',
+          themeMode: themeMode,
+          onPrivacyChanged: _setPrivacy,
+          onDmChanged: _setDmPrivacy,
+          onThemeModeChanged: (value) =>
+              ref.read(themeControllerProvider).setMode(value),
+        ),
+      ),
+    );
   }
 
   Future<void> _pickAndUploadPhoto() async {
@@ -250,6 +255,7 @@ class _ProfileHeader extends StatelessWidget {
     this.photoBytes,
     this.status,
     this.onEditTap,
+    required this.onSettingsTap,
   });
 
   final String username;
@@ -261,10 +267,10 @@ class _ProfileHeader extends StatelessWidget {
   final UserStatus? status;
   final VoidCallback onPhotoTap;
   final VoidCallback? onEditTap;
+  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final resolvedBio = bio?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,51 +286,77 @@ class _ProfileHeader extends StatelessWidget {
               onTap: onPhotoTap,
             ),
             const SizedBox(width: 16),
-            Expanded(child: _StatsRow(status: status)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: Color(0xFFF0ECE6),
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      height: 1.02,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '@$username',
+                    style: const TextStyle(
+                      color: Color(0xFFC0BBB4),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 16),
-        Text(
-          displayName,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w900,
-            height: 1.02,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          '@$username',
-          style: TextStyle(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 22),
         Text(
           resolvedBio?.isNotEmpty == true
               ? resolvedBio!
-              : 'One-card discovery, private signals, cast-ready.',
-          style: TextStyle(
-            color: theme.colorScheme.onSurfaceVariant,
-            height: 1.32,
+              : 'Sound designer & ambient explorer. Curating field recordings and late-night thoughts. Listening more than speaking.',
+          style: const TextStyle(
+            color: Color(0xFFE6E1DA),
+            fontSize: 19,
+            height: 1.55,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+        _StatsRow(status: status),
+        const SizedBox(height: 22),
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onPhotoTap,
-                icon: const Icon(Icons.add_a_photo_outlined),
-                label: const Text('Photo'),
+              child: FilledButton(
+                onPressed: onEditTap,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2B2928),
+                  foregroundColor: const Color(0xFFF0ECE6),
+                  minimumSize: const Size.fromHeight(54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Edit Profile'),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 14),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onEditTap,
-                icon: const Icon(Icons.tune),
-                label: const Text('Profile'),
+              child: OutlinedButton(
+                onPressed: onSettingsTap,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFF0ECE6),
+                  minimumSize: const Size.fromHeight(54),
+                  side: const BorderSide(color: Color(0xFF2E2C2B)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Settings'),
               ),
             ),
           ],
@@ -351,8 +383,6 @@ class _EditableHeroAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
     return InkWell(
       borderRadius: BorderRadius.circular(100),
       onTap: onTap,
@@ -360,24 +390,22 @@ class _EditableHeroAvatar extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Container(
+            width: 126,
+            height: 126,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF252525), width: 5),
+            ),
+          ),
+          Container(
             width: 112,
             height: 112,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: colors.border, width: 8),
-            ),
-          ),
-          Container(
-            width: 94,
-            height: 94,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.surface, width: 4),
+              border: Border.all(color: const Color(0xFF111111), width: 4),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: theme.brightness == Brightness.dark ? 0.34 : 0.14,
-                  ),
+                  color: Colors.black.withValues(alpha: .42),
                   blurRadius: 30,
                   offset: const Offset(0, 18),
                 ),
@@ -389,27 +417,27 @@ class _EditableHeroAvatar extends StatelessWidget {
                   : ProfileAvatar(
                       username: username,
                       imageUrl: imageUrl,
-                      radius: 47,
+                      radius: 56,
                     ),
             ),
           ),
           Positioned(
-            right: 0,
-            bottom: 2,
+            right: 5,
+            bottom: 12,
             child: Container(
-              width: 32,
-              height: 32,
+              width: 18,
+              height: 18,
               decoration: BoxDecoration(
-                color: colors.berry,
+                color: const Color(0xFFD6D2CC),
                 shape: BoxShape.circle,
-                border: Border.all(color: theme.colorScheme.surface, width: 2),
+                border: Border.all(color: const Color(0xFF111111), width: 2),
               ),
               child: isUploading
                   ? const Padding(
-                      padding: EdgeInsets.all(8),
+                      padding: EdgeInsets.all(3),
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                  : null,
             ),
           ),
         ],
@@ -573,10 +601,12 @@ class _StatsRow extends StatelessWidget {
           label: 'Followers',
           value: '${status?.followersCount ?? 0}',
         ),
+        const SizedBox(width: 42),
         _ProfileMetric(
           label: 'Following',
           value: '${status?.followingCount ?? 0}',
         ),
+        const SizedBox(width: 42),
         _ProfileMetric(label: 'Vibes', value: '${status?.vibesCount ?? 0}'),
       ],
     );
@@ -591,37 +621,28 @@ class _ProfileMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: colors.elevated,
-          border: Border.all(color: colors.border),
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Color(0xFFF0ECE6),
+            fontSize: 26,
+            fontWeight: FontWeight.w900,
+            height: 1,
+          ),
         ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
+        const SizedBox(height: 7),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFFC0BBB4),
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -724,93 +745,107 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
-class _VibeGrid extends StatelessWidget {
-  const _VibeGrid({required this.vibes});
+class _RecentArchiveList extends StatelessWidget {
+  const _RecentArchiveList({required this.vibes});
 
   final List<VibeFeedItem> vibes;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 430;
-        final crossAxisCount = isWide ? 3 : 2;
-        return GridView.builder(
-          itemCount: vibes.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: isWide ? 0.88 : 0.82,
-          ),
-          itemBuilder: (context, index) => _VibeTile(vibe: vibes[index]),
-        );
-      },
+    return Column(
+      children: [
+        for (var i = 0; i < vibes.length; i++) ...[
+          _ArchiveTile(vibe: vibes[i], isPlaying: i == 0),
+          if (i != vibes.length - 1) const SizedBox(height: 14),
+        ],
+      ],
     );
   }
 }
 
-class _VibeTile extends StatelessWidget {
-  const _VibeTile({required this.vibe});
+class _ArchiveTile extends StatelessWidget {
+  const _ArchiveTile({required this.vibe, required this.isPlaying});
 
   final VibeFeedItem vibe;
+  final bool isPlaying;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
+    final title = vibe.isGoldenVoice
+        ? 'Rare archive'
+        : vibe.displayName?.trim().isNotEmpty == true
+        ? vibe.displayName!.trim()
+        : 'Voice archive';
     return Container(
-      padding: const EdgeInsets.all(12),
+      height: 82,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        color: const Color(0xFF1D1C1B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF252322)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Expanded(
-            child: Center(
-              child: SizedBox(
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: _MiniWavePainter(
-                    color: vibe.isGoldenVoice ? colors.lime : colors.berry,
-                  ),
-                ),
-              ),
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: isPlaying
+                  ? const Color(0xFFE2DED6)
+                  : const Color(0xFF2B2928),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isPlaying ? Icons.pause : Icons.play_arrow,
+              color: isPlaying
+                  ? const Color(0xFF111111)
+                  : const Color(0xFFE8E4DE),
+              size: 31,
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  vibe.isGoldenVoice ? 'Golden' : 'Vibe',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFEDE9E3),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              Icon(
-                vibe.isGoldenVoice ? Icons.auto_awesome : Icons.favorite,
-                size: 17,
-                color: vibe.isGoldenVoice ? colors.lime : colors.berry,
-              ),
-            ],
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: 116,
+                  height: 18,
+                  child: CustomPaint(
+                    painter: _MiniWavePainter(color: const Color(0xFF8B8781)),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 3),
           Text(
-            '${vibe.duration}s  /  ${vibe.swipeRightCount} likes',
-            style: TextStyle(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+            _duration(vibe.duration),
+            style: const TextStyle(
+              color: Color(0xFFD0CBC4),
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _duration(int seconds) {
+    final safe = seconds <= 0 ? 42 : seconds;
+    return '${safe ~/ 60}:${(safe % 60).toString().padLeft(2, '0')}';
   }
 }
 
@@ -851,8 +886,9 @@ class _EmptyVibes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<SvibeColors>()!;
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border.all(color: theme.colorScheme.outline),
@@ -860,8 +896,17 @@ class _EmptyVibes extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(Icons.graphic_eq, size: 42),
-          const SizedBox(height: 10),
+          Container(
+            width: 74,
+            height: 74,
+            decoration: BoxDecoration(
+              color: colors.elevated,
+              shape: BoxShape.circle,
+              border: Border.all(color: colors.border),
+            ),
+            child: const Icon(Icons.graphic_eq, size: 36),
+          ),
+          const SizedBox(height: 14),
           Text(
             'No vibes yet',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -873,6 +918,12 @@ class _EmptyVibes extends StatelessWidget {
             'Cast your first voice to fill this profile.',
             textAlign: TextAlign.center,
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 18),
+          OutlinedButton.icon(
+            onPressed: onCastHint,
+            icon: const Icon(Icons.mic_external_on),
+            label: const Text('Cast first vibe'),
           ),
         ],
       ),

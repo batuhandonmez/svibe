@@ -18,7 +18,11 @@ class Settings(BaseSettings):
         "http://localhost:8090,"
         "http://127.0.0.1:8090,"
         "http://localhost:8093,"
-        "http://127.0.0.1:8093"
+        "http://127.0.0.1:8093,"
+        "http://localhost:8095,"
+        "http://127.0.0.1:8095,"
+        "http://localhost:8096,"
+        "http://127.0.0.1:8096"
     )
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
@@ -49,11 +53,22 @@ class Settings(BaseSettings):
 
     @property
     def cors_allow_origins(self) -> list[str]:
-        return [
+        configured = [
             origin.strip()
             for origin in self.CORS_ALLOW_ORIGINS.split(",")
             if origin.strip()
         ]
+        local_preview_origins = [
+            "http://localhost:8090",
+            "http://127.0.0.1:8090",
+            "http://localhost:8093",
+            "http://127.0.0.1:8093",
+            "http://localhost:8095",
+            "http://127.0.0.1:8095",
+            "http://localhost:8096",
+            "http://127.0.0.1:8096",
+        ]
+        return list(dict.fromkeys([*configured, *local_preview_origins]))
 
 
 settings = Settings()

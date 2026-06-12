@@ -6,7 +6,7 @@ final themeControllerProvider = ChangeNotifierProvider<ThemeController>((ref) {
 });
 
 class ThemeController extends ChangeNotifier {
-  ThemeMode _mode = ThemeMode.system;
+  ThemeMode _mode = ThemeMode.dark;
 
   ThemeMode get mode => _mode;
 

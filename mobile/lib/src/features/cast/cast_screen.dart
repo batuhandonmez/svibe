@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -10,7 +11,6 @@ import 'package:record/record.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/motion/motion_trigger.dart';
-import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
 
 class CastScreen extends ConsumerStatefulWidget {
@@ -23,14 +23,10 @@ class CastScreen extends ConsumerStatefulWidget {
 class _CastScreenState extends ConsumerState<CastScreen> {
   final _recorder = AudioRecorder();
   late final MotionTrigger _castMotion;
-  double _pull = 0;
-  bool _isArmed = false;
   bool _isUploading = false;
   bool _isRecording = false;
-  PlatformFile? _audioFile;
   Uint8List? _recordedBytes;
   String? _recordedPath;
-  int _duration = 15;
   int _recordSeconds = 0;
   Timer? _recordTimer;
 
@@ -40,7 +36,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     _castMotion = MotionTrigger(
       threshold: 16,
       onTrigger: () {
-        if (!_isUploading && !_isRecording) {
+        if (!_isUploading && !_isRecording && _recordedBytes != null) {
           _cast();
         }
       },
@@ -55,42 +51,10 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     super.dispose();
   }
 
-  Future<void> _pickAudio() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const [
-        'aac',
-        'm4a',
-        'mp3',
-        'ogg',
-        'opus',
-        'wav',
-        'webm',
-      ],
-      withData: true,
-    );
-    final file = result?.files.single;
-    if (file == null || !mounted) {
+  Future<void> _startRecording() async {
+    if (_isUploading || _isRecording) {
       return;
     }
-    setState(() {
-      _audioFile = file;
-      _recordedBytes = null;
-      _recordedPath = null;
-      _recordSeconds = 0;
-      _duration = _duration.clamp(1, 30);
-    });
-  }
-
-  Future<void> _toggleRecording() async {
-    if (_isRecording) {
-      await _stopRecording();
-    } else {
-      await _startRecording();
-    }
-  }
-
-  Future<void> _startRecording() async {
     final hasPermission = await _recorder.hasPermission();
     if (!hasPermission) {
       _show('Microphone permission is needed to record.');
@@ -111,11 +75,9 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     }
     setState(() {
       _isRecording = true;
-      _audioFile = null;
       _recordedBytes = null;
       _recordedPath = null;
       _recordSeconds = 0;
-      _duration = 1;
     });
     _recordTimer?.cancel();
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
@@ -123,24 +85,25 @@ class _CastScreenState extends ConsumerState<CastScreen> {
         return;
       }
       final next = _recordSeconds + 1;
-      setState(() {
-        _recordSeconds = next;
-        _duration = next.clamp(1, 30);
-      });
+      setState(() => _recordSeconds = next);
       if (next >= 30) {
-        await _stopRecording();
+        await _stopRecording(castAfterStop: true);
       }
     });
   }
 
-  Future<void> _stopRecording() async {
+  Future<void> _stopRecording({bool castAfterStop = true}) async {
+    if (!_isRecording) {
+      return;
+    }
     _recordTimer?.cancel();
     final path = await _recorder.stop();
     if (!mounted) {
       return;
     }
+    setState(() => _isRecording = false);
+
     if (path == null) {
-      setState(() => _isRecording = false);
       _show('Recording could not be saved.');
       return;
     }
@@ -150,12 +113,13 @@ class _CastScreenState extends ConsumerState<CastScreen> {
       bytes = await File(path).readAsBytes();
     }
     setState(() {
-      _isRecording = false;
       _recordedPath = path;
       _recordedBytes = bytes;
-      _audioFile = null;
-      _duration = _recordSeconds.clamp(1, 30);
     });
+
+    if (castAfterStop) {
+      await _cast();
+    }
   }
 
   Future<String> _recordPath() async {
@@ -167,28 +131,53 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     return '${dir.path}${Platform.pathSeparator}$filename';
   }
 
-  Future<void> _cast() async {
-    if (_isRecording || _isUploading) {
+  Future<void> _pickAudioFallback() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const [
+        'aac',
+        'm4a',
+        'mp3',
+        'ogg',
+        'opus',
+        'wav',
+        'webm',
+      ],
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null || !mounted) {
       return;
     }
-    final token = ref.read(authControllerProvider).token;
-    final pickedBytes = _audioFile?.bytes;
-    final pickedName = _audioFile?.name;
-    final recordedBytes = _recordedBytes;
-    final recordedPath = _recordedPath;
+    await _castBytes(bytes, filename: file.name, duration: 30);
+  }
 
-    Uint8List? bytes;
-    String? filename;
-    if (recordedBytes != null && recordedPath != null) {
-      bytes = recordedBytes;
-      filename = recordedPath.split(RegExp(r'[\\/]')).last;
-    } else if (pickedBytes != null && pickedName != null) {
-      bytes = Uint8List.fromList(pickedBytes);
-      filename = pickedName;
+  Future<void> _cast() async {
+    final bytes = _recordedBytes;
+    final path = _recordedPath;
+    if (bytes == null || path == null) {
+      if (kIsWeb) {
+        _show('Browser recording is limited here. Use audio fallback.');
+      } else {
+        _show('Hold the mic to record first.');
+      }
+      return;
     }
+    await _castBytes(
+      bytes,
+      filename: path.split(RegExp(r'[\\/]')).last,
+      duration: _recordSeconds.clamp(1, 30),
+    );
+  }
 
-    if (token == null || bytes == null || filename == null) {
-      _show('Record or choose an audio file first.');
+  Future<void> _castBytes(
+    Uint8List bytes, {
+    required String filename,
+    required int duration,
+  }) async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null || _isUploading) {
       return;
     }
 
@@ -200,21 +189,17 @@ class _CastScreenState extends ConsumerState<CastScreen> {
             token,
             bytes: bytes,
             filename: filename,
-            duration: _duration,
+            duration: duration,
           );
       ref.invalidate(userStatusProvider);
       if (!mounted) {
         return;
       }
-      _show('Voice casted. It can now enter public discovery.');
+      _show('Voice casted.');
       setState(() {
-        _audioFile = null;
         _recordedBytes = null;
         _recordedPath = null;
         _recordSeconds = 0;
-        _duration = 15;
-        _pull = 0;
-        _isArmed = false;
       });
     } on SvibeApiException catch (exception) {
       if (mounted) {
@@ -237,476 +222,261 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   Widget build(BuildContext context) {
     final status = ref.watch(userStatusProvider);
     final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cast'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: IconButton.filledTonal(
-              tooltip: 'Close',
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.close),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFF101010),
       body: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
-          child: status.when(
-            data: (value) {
-              final canCast = value?.canUploadVibe ?? false;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _CastHeader(canCast: canCast, colors: colors),
-                  const SizedBox(height: 14),
-                  _RecordPanel(
-                    isRecording: _isRecording,
-                    seconds: _recordSeconds,
-                    hasRecording: _recordedBytes != null,
-                    enabled: canCast && !_isUploading,
-                    onToggle: _toggleRecording,
-                  ),
-                  const SizedBox(height: 12),
-                  _AudioPickerPanel(
-                    file: _audioFile,
-                    duration: _duration,
-                    enabled: canCast && !_isUploading && !_isRecording,
-                    onPick: _pickAudio,
-                    onDurationChanged: (value) =>
-                        setState(() => _duration = value),
-                  ),
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: GestureDetector(
-                      onPanUpdate: canCast && !_isUploading && !_isRecording
-                          ? (details) {
-                              setState(() {
-                                _pull = (_pull - details.delta.dy).clamp(
-                                  0,
-                                  160,
-                                );
-                                _isArmed = _pull > 95;
-                              });
-                            }
-                          : null,
-                      onPanEnd: canCast && !_isUploading && !_isRecording
-                          ? (_) {
-                              if (_isArmed) {
-                                _cast();
-                              } else {
-                                setState(() => _pull = 0);
-                              }
-                            }
-                          : null,
-                      child: _CastPad(
-                        pull: _pull,
-                        isArmed: _isArmed,
-                        isUploading: _isUploading,
-                        canCast: canCast,
-                        isEnabled: canCast && !_isRecording,
-                        onCast: _cast,
+        child: status.when(
+          data: (value) {
+            final canCast = value?.canUploadVibe ?? false;
+            return Stack(
+              children: [
+                const Positioned.fill(child: _CastBackdrop()),
+                Positioned(
+                  top: 18,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Text(
+                      'svibe',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: const Color(0xFFF2F0EB),
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                   ),
-                ],
-              );
-            },
-            error: (_, __) =>
-                const Center(child: Text('Cast state unavailable')),
-            loading: () => const Center(child: CircularProgressIndicator()),
+                ),
+                Positioned(
+                  top: 14,
+                  right: 18,
+                  child: _RoundIconButton(
+                    tooltip: 'Close',
+                    icon: Icons.close,
+                    onTap: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 98, 28, 34),
+                    child: Column(
+                      children: [
+                        const Spacer(flex: 3),
+                        Text(
+                          _isRecording
+                              ? 'RECORDING'
+                              : _isUploading
+                              ? 'CASTING'
+                              : 'STANDBY',
+                          style: const TextStyle(
+                            color: Color(0xFFC9C6C0),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 3.4,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _formattedTime(_recordSeconds),
+                          style: const TextStyle(
+                            color: Color(0xFF8E8A86),
+                            fontSize: 56,
+                            fontWeight: FontWeight.w300,
+                            height: 1,
+                          ),
+                        ),
+                        const Spacer(flex: 2),
+                        SizedBox(
+                          height: 28,
+                          width: 260,
+                          child: CustomPaint(
+                            painter: _CastWavePainter(
+                              active: _isRecording || _isUploading,
+                            ),
+                          ),
+                        ),
+                        const Spacer(flex: 4),
+                        Text(
+                          canCast
+                              ? 'Hold to capture, release to cast'
+                              : 'Find a Golden Voice to speak again',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF918D88),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        GestureDetector(
+                          onTap: kIsWeb && canCast && !_isUploading
+                              ? _pickAudioFallback
+                              : null,
+                          onLongPressStart: canCast
+                              ? (_) => _startRecording()
+                              : null,
+                          onLongPressEnd: canCast
+                              ? (_) => _stopRecording(castAfterStop: true)
+                              : null,
+                          child: _RecordButton(
+                            enabled: canCast,
+                            recording: _isRecording,
+                            uploading: _isUploading,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          error: (_, __) => const Center(child: Text('Cast state unavailable')),
+          loading: () => const Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+  }
+
+  String _formattedTime(int seconds) {
+    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+    final remainder = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$remainder';
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            color: const Color(0xFF202020),
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF292929)),
           ),
+          child: Icon(icon, color: const Color(0xFFE6E3DD), size: 28),
         ),
       ),
     );
   }
 }
 
-class _CastHeader extends StatelessWidget {
-  const _CastHeader({required this.canCast, required this.colors});
-
-  final bool canCast;
-  final SvibeColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.elevated,
-        border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 62,
-            height: 62,
-            decoration: BoxDecoration(
-              color: canCast
-                  ? colors.orange
-                  : colors.muted.withValues(alpha: 0.18),
-              shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.onSurface, width: 2),
-            ),
-            child: Icon(
-              canCast ? Icons.near_me : Icons.lock_outline,
-              color: canCast ? Colors.black : theme.colorScheme.onSurface,
-              size: 30,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  canCast ? 'Cast a signal' : 'Signal locked',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  canCast
-                      ? 'Record up to 30 seconds, then throw it into discovery.'
-                      : 'Find and unlock a Golden Voice to speak again.',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordPanel extends StatelessWidget {
-  const _RecordPanel({
-    required this.isRecording,
-    required this.seconds,
-    required this.hasRecording,
+class _RecordButton extends StatelessWidget {
+  const _RecordButton({
     required this.enabled,
-    required this.onToggle,
+    required this.recording,
+    required this.uploading,
   });
 
-  final bool isRecording;
-  final int seconds;
-  final bool hasRecording;
   final bool enabled;
-  final VoidCallback onToggle;
+  final bool recording;
+  final bool uploading;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    return Container(
-      padding: const EdgeInsets.all(14),
+    final foreground = enabled
+        ? const Color(0xFFEAE6DE)
+        : const Color(0xFF6F6A66);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      width: recording ? 118 : 104,
+      height: recording ? 118 : 104,
       decoration: BoxDecoration(
-        color: colors.elevated,
-        border: Border.all(color: isRecording ? colors.berry : colors.border),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: isRecording
-                  ? colors.berry.withValues(alpha: 0.16)
-                  : colors.blue.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isRecording ? Icons.fiber_manual_record : Icons.mic,
-              color: isRecording ? colors.berry : colors.blue,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              isRecording
-                  ? 'Recording ${seconds}s / 30s'
-                  : hasRecording
-                  ? 'Recording ready'
-                  : 'Record a new voice',
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-          OutlinedButton(
-            onPressed: enabled ? onToggle : null,
-            child: Text(isRecording ? 'Stop' : 'Record'),
+        color: const Color(0xFF111111),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: recording ? const Color(0xFFEAE6DE) : const Color(0xFF3A3836),
+          width: recording ? 5 : 8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .58),
+            blurRadius: 34,
+            offset: const Offset(0, 18),
           ),
         ],
+      ),
+      child: uploading
+          ? const Padding(
+              padding: EdgeInsets.all(34),
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            )
+          : Icon(
+              recording ? Icons.stop : Icons.mic_none,
+              color: foreground,
+              size: 42,
+            ),
+    );
+  }
+}
+
+class _CastBackdrop extends StatelessWidget {
+  const _CastBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: const Alignment(0, .16),
+          radius: 1.05,
+          colors: [
+            const Color(0xFF252525).withValues(alpha: .58),
+            const Color(0xFF151515).withValues(alpha: .74),
+            const Color(0xFF101010),
+          ],
+          stops: const [0, .42, 1],
+        ),
       ),
     );
   }
 }
 
-class _AudioPickerPanel extends StatelessWidget {
-  const _AudioPickerPanel({
-    required this.file,
-    required this.duration,
-    required this.enabled,
-    required this.onPick,
-    required this.onDurationChanged,
-  });
+class _CastWavePainter extends CustomPainter {
+  const _CastWavePainter({required this.active});
 
-  final PlatformFile? file;
-  final int duration;
-  final bool enabled;
-  final VoidCallback onPick;
-  final ValueChanged<int> onDurationChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.elevated,
-        border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: colors.lilac.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.audio_file, color: colors.lilac),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  file?.name ?? 'Or choose an audio file',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-              OutlinedButton(
-                onPressed: enabled ? onPick : null,
-                child: const Text('Choose'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Text('Duration'),
-              Expanded(
-                child: Slider(
-                  activeColor: colors.berry,
-                  inactiveColor: colors.border,
-                  value: duration.toDouble(),
-                  min: 1,
-                  max: 30,
-                  divisions: 29,
-                  label: '${duration}s',
-                  onChanged: enabled
-                      ? (value) => onDurationChanged(value.round())
-                      : null,
-                ),
-              ),
-              SizedBox(
-                width: 42,
-                child: Text(
-                  '${duration}s',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CastPad extends StatelessWidget {
-  const _CastPad({
-    required this.pull,
-    required this.isArmed,
-    required this.isUploading,
-    required this.canCast,
-    required this.isEnabled,
-    required this.onCast,
-  });
-
-  final double pull;
-  final bool isArmed;
-  final bool isUploading;
-  final bool canCast;
-  final bool isEnabled;
-  final VoidCallback onCast;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<SvibeColors>()!;
-    final progress = (pull / 160).clamp(0.0, 1.0);
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.elevated,
-        border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _CastTrajectoryPainter(
-                color: canCast
-                    ? colors.orange.withValues(alpha: 0.45)
-                    : colors.border,
-                progress: progress,
-              ),
-            ),
-          ),
-          Transform.translate(
-            offset: Offset(0, -pull),
-            child: Container(
-              width: 142,
-              height: 142,
-              decoration: BoxDecoration(
-                color: isArmed ? colors.orange : theme.colorScheme.surface,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isArmed ? Colors.black : colors.orange,
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.orange.withValues(
-                      alpha: isArmed ? 0.35 : 0.16,
-                    ),
-                    blurRadius: isArmed ? 30 : 18,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: Icon(
-                isUploading ? Icons.cloud_upload : Icons.near_me,
-                size: 56,
-                color: isArmed ? Colors.black : colors.orange,
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 26,
-            left: 22,
-            right: 22,
-            child: Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    minHeight: 9,
-                    value: isUploading ? null : progress,
-                    color: colors.orange,
-                    backgroundColor: colors.border,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  !canCast
-                      ? 'Locked'
-                      : isUploading
-                      ? 'Casting'
-                      : isArmed
-                      ? 'Release'
-                      : 'Pull up or flick',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Manual cast stays ready.',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            right: 18,
-            top: 18,
-            child: FilledButton.tonal(
-              onPressed: isEnabled && !isUploading ? onCast : null,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 40),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                backgroundColor: colors.blue.withValues(alpha: 0.14),
-                foregroundColor: colors.blue,
-              ),
-              child: const Icon(Icons.send, size: 18),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CastTrajectoryPainter extends CustomPainter {
-  const _CastTrajectoryPainter({required this.color, required this.progress});
-
-  final Color color;
-  final double progress;
+  final bool active;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
+      ..color = Color(active ? 0xFFE8E5DF : 0xFF343331)
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 3;
-
-    final path = Path()
-      ..moveTo(size.width * 0.18, size.height * 0.72)
-      ..quadraticBezierTo(
-        size.width * 0.48,
-        size.height * (0.08 + 0.18 * (1 - progress)),
-        size.width * 0.82,
-        size.height * 0.34,
-      );
-    canvas.drawPath(path, paint);
-
-    final dotPaint = Paint()..color = color.withValues(alpha: 0.85);
-    for (final factor in const [0.24, 0.48, 0.72]) {
-      canvas.drawCircle(
-        Offset(size.width * factor, size.height * (0.78 - factor * 0.55)),
-        4,
-        dotPaint,
+    const bars = 42;
+    final center = size.height / 2;
+    for (var i = 0; i < bars; i++) {
+      final phase = i / (bars - 1);
+      final envelope = math.sin(math.pi * phase);
+      final irregular = .45 + ((i * 7) % 11) / 16;
+      final height = 4 + envelope * irregular * (active ? 22 : 12);
+      final x = phase * size.width;
+      canvas.drawLine(
+        Offset(x, center - height / 2),
+        Offset(x, center + height / 2),
+        paint,
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _CastTrajectoryPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _CastWavePainter oldDelegate) {
+    return oldDelegate.active != active;
   }
 }
