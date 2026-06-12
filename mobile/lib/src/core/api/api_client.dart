@@ -281,9 +281,9 @@ class SvibeApiClient {
     try {
       return await request();
     } on DioException catch (error) {
-      final data = error.response?.data;
-      if (data is Map<String, dynamic> && data['detail'] is String) {
-        throw SvibeApiException(data['detail'] as String);
+      final message = _responseErrorMessage(error.response?.data);
+      if (message != null) {
+        throw SvibeApiException(message);
       }
       if (error.type == DioExceptionType.connectionError) {
         throw SvibeApiException(
@@ -301,6 +301,27 @@ class SvibeApiClient {
       }
       throw SvibeApiException('Svibe API request failed.');
     }
+  }
+
+  String? _responseErrorMessage(Object? data) {
+    if (data is! Map<String, dynamic>) {
+      return null;
+    }
+    final detail = data['detail'];
+    if (detail is String) {
+      return detail;
+    }
+    if (detail is List && detail.isNotEmpty) {
+      final messages = detail
+          .whereType<Map<String, dynamic>>()
+          .map((item) => item['msg'])
+          .whereType<String>()
+          .toList();
+      if (messages.isNotEmpty) {
+        return messages.join(' ');
+      }
+    }
+    return null;
   }
 }
 

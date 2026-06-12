@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import 'auth_controller.dart';
 
@@ -190,6 +191,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       colors: colors,
                       enabled: !auth.isLoading,
                       onTap: _loginDemo,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'API: ${defaultApiBaseUrl()}',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant
+                            .withValues(alpha: .66),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
