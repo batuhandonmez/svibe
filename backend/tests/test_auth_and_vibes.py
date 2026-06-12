@@ -1,15 +1,18 @@
 # backend/tests/test_auth_and_vibes.py
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 import routers.dm as dm_router
 import routers.vibes as vibes_router
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import text, update
 
 from core.database import Base, engine
 from core.migrations import apply_lightweight_migrations
 from main import app
+from models.user import User
+from models.vibe_listen import VibeListen
 
 
 @pytest.fixture(autouse=True)
@@ -84,16 +87,13 @@ def test_user_status_resets_expired_daily_vibe_count():
         payload = _register(client, "quota", is_vip=True)
         with engine.begin() as connection:
             connection.execute(
-                text(
-                    "UPDATE users "
-                    "SET daily_vibe_count = 0, daily_vibe_reset_at = :reset_at "
-                    "WHERE id = :user_id"
-                ),
-                {
-                    "reset_at": datetime.now(UTC).replace(tzinfo=None)
+                update(User)
+                .where(User.id == UUID(payload["user"]["id"]))
+                .values(
+                    daily_vibe_count=0,
+                    daily_vibe_reset_at=datetime.now(UTC).replace(tzinfo=None)
                     - timedelta(seconds=1),
-                    "user_id": payload["user"]["id"],
-                },
+                ),
             )
 
         status_response = client.get("/users/me/status", headers=_headers(payload))
@@ -131,8 +131,9 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         listener = _register(client, "listener", is_vip=False)
         with engine.begin() as connection:
             connection.execute(
-                text("UPDATE users SET is_muted = true WHERE id = :user_id"),
-                {"user_id": listener["user"]["id"]},
+                update(User)
+                .where(User.id == UUID(listener["user"]["id"]))
+                .values(is_muted=True),
             )
 
         upload = client.post(
@@ -206,17 +207,15 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
 
         with engine.begin() as connection:
             connection.execute(
-                text(
-                    "UPDATE vibe_listens "
-                    "SET started_at = :started_at "
-                    "WHERE user_id = :user_id AND vibe_id = :vibe_id"
-                ),
-                {
-                    "started_at": datetime.now(UTC).replace(tzinfo=None)
+                update(VibeListen)
+                .where(
+                    VibeListen.user_id == UUID(listener["user"]["id"]),
+                    VibeListen.vibe_id == UUID(vibe["id"]),
+                )
+                .values(
+                    started_at=datetime.now(UTC).replace(tzinfo=None)
                     - timedelta(seconds=1000),
-                    "user_id": listener["user"]["id"],
-                    "vibe_id": vibe["id"],
-                },
+                ),
             )
 
         pending_unlock = client.post(

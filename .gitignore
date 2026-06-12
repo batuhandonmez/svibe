@@ -29,4 +29,5 @@ Thumbs.db
 
 # Local reports and generated logs
 *.log
+*.sqlite3
 outputs/

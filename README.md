@@ -25,6 +25,18 @@ cd backend
 .\venv\Scripts\python.exe -m pytest -q
 ```
 
+Smoke check against a running local backend:
+
+```powershell
+.\venv\Scripts\python.exe ..\scripts\smoke_backend.py --base-url http://127.0.0.1:8000
+```
+
+If the demo account has not been seeded, use the public register flow instead:
+
+```powershell
+.\venv\Scripts\python.exe ..\scripts\smoke_backend.py --base-url http://127.0.0.1:8000 --mode register
+```
+
 ## Mobile
 
 ```powershell
@@ -43,6 +55,25 @@ flutter run --dart-define API_BASE_URL=http://127.0.0.1:8000
 
 Android emulator uses `http://10.0.2.2:8000` by default when
 `API_BASE_URL` is not supplied.
+
+Run on a real phone connected to the same Wi-Fi as this computer:
+
+```powershell
+# Find the computer LAN IPv4 address, usually something like 192.168.x.x
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
+  $_.IPAddress -notlike '127.*' -and $_.PrefixOrigin -ne 'WellKnown'
+} | Select-Object IPAddress,InterfaceAlias
+
+cd mobile
+flutter run --dart-define API_BASE_URL=http://YOUR_COMPUTER_LAN_IP:8000
+```
+
+Keep the backend running on `0.0.0.0` for physical-device testing:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
 ## Local Web Demo
 

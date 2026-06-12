@@ -287,7 +287,16 @@ class SvibeApiClient {
       }
       if (error.type == DioExceptionType.connectionError) {
         throw SvibeApiException(
-          'Cannot reach Svibe API at ${defaultApiBaseUrl()}.',
+          'Cannot reach Svibe API at ${defaultApiBaseUrl()}. '
+          'Start the backend and, on a real phone, run with '
+          'API_BASE_URL set to your computer LAN IP.',
+        );
+      }
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        throw SvibeApiException(
+          'Svibe API timed out at ${defaultApiBaseUrl()}. '
+          'Check that the phone and computer are on the same network.',
         );
       }
       throw SvibeApiException('Svibe API request failed.');

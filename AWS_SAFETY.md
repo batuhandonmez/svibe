@@ -17,6 +17,21 @@ Svibe currently uses AWS only for S3 audio storage.
 - Rotate the IAM access key if it was shared outside the local `.env`.
 - Set an AWS Budget alarm before doing more AWS work.
 
+## Access Key Rotation
+
+If an AWS key was pasted into chat, screenshots, logs, or any tool outside the
+local `.env`, treat it as exposed:
+
+1. Open IAM in the AWS Console.
+2. Find the limited development user, currently `svibe-s3-uploader-dev`.
+3. Create a new access key for local development use.
+4. Update only `backend/.env` with the new key pair.
+5. Run the backend smoke check and one S3 upload test.
+6. Deactivate the old key.
+7. After the app still works, delete the old key.
+
+Never place the new key in README, chat, screenshots, commits, or issue text.
+
 ## Recommended AWS Budget
 
 Create a monthly cost budget:
