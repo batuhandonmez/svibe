@@ -70,5 +70,14 @@ class Settings(BaseSettings):
         ]
         return list(dict.fromkeys([*configured, *local_preview_origins]))
 
+    @property
+    def cors_local_origin_regex(self) -> str | None:
+        if self.ENVIRONMENT.lower() in {"production", "prod"}:
+            return None
+        return (
+            r"^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|"
+            r"10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):\d+$"
+        )
+
 
 settings = Settings()

@@ -20,3 +20,22 @@ def test_production_requires_long_jwt_secret():
             ENVIRONMENT="production",
             JWT_SECRET_KEY="short-secret",
         )
+
+
+def test_local_cors_regex_is_disabled_in_production():
+    settings = Settings(
+        DATABASE_URL="postgresql://postgres:password@example.com/postgres",
+        ENVIRONMENT="production",
+        JWT_SECRET_KEY="a-production-secret-that-is-long-enough",
+    )
+
+    assert settings.cors_local_origin_regex is None
+
+
+def test_local_cors_regex_is_enabled_in_development():
+    settings = Settings(
+        DATABASE_URL="postgresql://postgres:password@example.com/postgres",
+        ENVIRONMENT="development",
+    )
+
+    assert settings.cors_local_origin_regex is not None
