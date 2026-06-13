@@ -52,6 +52,20 @@ function Wait-ForHealth([string]$Url) {
     throw "Backend did not become healthy at $Url"
 }
 
+function Wait-ForWeb([string]$Url) {
+    for ($i = 0; $i -lt 90; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
+            if ($response.StatusCode -eq 200) {
+                return
+            }
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+    throw "Flutter web did not become reachable at $Url"
+}
+
 if (-not (Test-Path $python)) {
     throw "Backend virtualenv Python not found at $python"
 }
@@ -87,7 +101,7 @@ if (-not $backendPid) {
         -RedirectStandardError (Join-Path $backendDir "uvicorn.err.log") `
         -WindowStyle Hidden
 } else {
-    Write-Host "Reusing backend process $backendPid on port $BackendPort"
+    Write-Output "Reusing backend process $backendPid on port $BackendPort"
 }
 
 Wait-ForHealth "http://127.0.0.1:${BackendPort}/health"
@@ -114,13 +128,15 @@ if (-not $webPid) {
         -RedirectStandardError (Join-Path $mobileDir "flutter_web.err.log") `
         -WindowStyle Hidden
 } else {
-    Write-Host "Reusing Flutter web process $webPid on port $WebPort"
+    Write-Output "Reusing Flutter web process $webPid on port $WebPort"
 }
 
-Write-Host ""
-Write-Host "Svibe local web demo is starting."
-Write-Host "API:  $apiBaseUrl"
-Write-Host "Web:  $webUrl"
-Write-Host "Demo: $Username / demo12345"
-Write-Host ""
-Write-Host "If the browser says it cannot reach the API, rerun with -Restart."
+Wait-ForWeb "http://127.0.0.1:${WebPort}/"
+
+Write-Output ""
+Write-Output "Svibe local web demo is ready."
+Write-Output "API:  $apiBaseUrl"
+Write-Output "Web:  $webUrl"
+Write-Output "Demo: $Username / demo12345"
+Write-Output ""
+Write-Output "If the browser says it cannot reach the API, rerun with -Restart."
