@@ -141,6 +141,15 @@ def main() -> int:
         checks.append("demo/audio_url")
     checks.append("vibes/discover/next")
 
+    my_vibes = _request(args.base_url, "GET", "/vibes/mine", token=token)
+    if "items" not in my_vibes:
+        raise RuntimeError(f"Unexpected my vibes response: {my_vibes}")
+    if args.mode == "demo" and not my_vibes["items"]:
+        raise RuntimeError(
+            "Demo profile archive is empty. Run scripts/seed_local_demo.py first."
+        )
+    checks.append("vibes/mine")
+
     threads = _request(args.base_url, "GET", "/dm/threads", token=token)
     if "items" not in threads:
         raise RuntimeError(f"Unexpected DM threads response: {threads}")

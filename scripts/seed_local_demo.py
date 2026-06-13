@@ -40,6 +40,9 @@ DEMO_VIBES = [
     ("nova_signal", 10, 659.25, 231, True, "nova-golden-voice.wav"),
     ("echo_deniz", 18, 392.0, 47, False, "echo-morning-note.wav"),
 ]
+DEMO_VIEWER_VIBES = [
+    (14, 330.0, 42, False, "demo-user-archive.wav"),
+]
 
 
 def make_wav(freq: float, seconds: int) -> bytes:
@@ -138,6 +141,26 @@ def viewer_user(db, username: str | None) -> User:
     return user
 
 
+def upsert_demo_vibe(db, user, audio_url, duration, likes, golden):
+    matching_vibes = db.scalars(
+        select(Vibe).where(Vibe.audio_url.like(f"%{audio_url.rsplit('/', 1)[-1]}"))
+    ).all()
+    vibe = matching_vibes[0] if matching_vibes else None
+    if vibe is None:
+        vibe = Vibe(user_id=user.id, audio_url=audio_url)
+        db.add(vibe)
+    for duplicate in matching_vibes[1:]:
+        db.delete(duplicate)
+    vibe.user_id = user.id
+    vibe.audio_url = audio_url
+    vibe.duration = duration
+    vibe.swipe_right_count = likes
+    vibe.is_golden_voice = golden
+    vibe.expires_at = utc_now() + timedelta(days=7)
+    db.flush()
+    return vibe
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed local demo vibes and DMs.")
     parser.add_argument("--username", help="Viewer username. Defaults to latest user.")
@@ -161,22 +184,21 @@ def main() -> None:
             path = media_dir / filename
             path.write_bytes(make_wav(freq, duration))
             audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
-            matching_vibes = db.scalars(
-                select(Vibe).where(Vibe.audio_url.like(f"%/media/demo/{filename}"))
-            ).all()
-            vibe = matching_vibes[0] if matching_vibes else None
-            if vibe is None:
-                vibe = Vibe(user_id=users[username].id, audio_url=audio_url)
-                db.add(vibe)
-            for duplicate in matching_vibes[1:]:
-                db.delete(duplicate)
-            vibe.audio_url = audio_url
-            vibe.duration = duration
-            vibe.swipe_right_count = likes
-            vibe.is_golden_voice = golden
-            vibe.expires_at = utc_now() + timedelta(days=7)
-            db.flush()
+            vibe = upsert_demo_vibe(
+                db,
+                users[username],
+                audio_url,
+                duration,
+                likes,
+                golden,
+            )
             demo_vibe_ids.append(vibe.id)
+
+        for duration, freq, likes, golden, filename in DEMO_VIEWER_VIBES:
+            path = media_dir / filename
+            path.write_bytes(make_wav(freq, duration))
+            audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
+            upsert_demo_vibe(db, viewer, audio_url, duration, likes, golden)
 
         if demo_vibe_ids:
             db.execute(
