@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../models/svibe_models.dart';
 
@@ -166,11 +167,16 @@ class SvibeApiClient {
     required List<int> bytes,
     required String filename,
   }) async {
+    final mediaType = _imageMediaType(filename);
     final response = await _post(
       '/users/me/photo',
       token: token,
       data: FormData.fromMap({
-        'photo': MultipartFile.fromBytes(bytes, filename: filename),
+        'photo': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: mediaType,
+        ),
       }),
     );
     final data = response.data as Map<String, dynamic>;
@@ -322,6 +328,15 @@ class SvibeApiClient {
       }
     }
     return null;
+  }
+
+  MediaType _imageMediaType(String filename) {
+    final extension = filename.split('.').last.toLowerCase();
+    return switch (extension) {
+      'jpg' || 'jpeg' => MediaType('image', 'jpeg'),
+      'webp' => MediaType('image', 'webp'),
+      _ => MediaType('image', 'png'),
+    };
   }
 }
 
