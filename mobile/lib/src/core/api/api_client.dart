@@ -6,6 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http_parser/http_parser.dart';
 
+import '../storage/browser_token_storage_stub.dart'
+    if (dart.library.html) '../storage/browser_token_storage_web.dart'
+    as browser_token_storage;
 import '../models/svibe_models.dart';
 
 const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
@@ -46,14 +49,25 @@ class SvibeApiClient {
   final FlutterSecureStorage _storage;
 
   Future<String?> readToken() {
+    if (kIsWeb) {
+      return Future.value(browser_token_storage.readToken(tokenKey));
+    }
     return _storage.read(key: tokenKey);
   }
 
   Future<void> saveToken(String token) {
+    if (kIsWeb) {
+      browser_token_storage.saveToken(tokenKey, token);
+      return Future.value();
+    }
     return _storage.write(key: tokenKey, value: token);
   }
 
   Future<void> clearToken() {
+    if (kIsWeb) {
+      browser_token_storage.clearToken(tokenKey);
+      return Future.value();
+    }
     return _storage.delete(key: tokenKey);
   }
 
