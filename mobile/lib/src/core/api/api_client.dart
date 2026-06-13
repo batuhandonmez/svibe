@@ -190,12 +190,17 @@ class SvibeApiClient {
     required String filename,
     required int duration,
   }) async {
+    final mediaType = _audioMediaType(filename);
     await _post(
       '/vibes',
       token: token,
       data: FormData.fromMap({
         'duration': duration,
-        'audio': MultipartFile.fromBytes(bytes, filename: filename),
+        'audio': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: mediaType,
+        ),
       }),
     );
   }
@@ -238,12 +243,17 @@ class SvibeApiClient {
     required String filename,
     required int duration,
   }) async {
+    final mediaType = _audioMediaType(filename);
     final response = await _post(
       '/dm/threads/$threadId/messages/audio',
       token: token,
       data: FormData.fromMap({
         'duration': duration,
-        'audio': MultipartFile.fromBytes(bytes, filename: filename),
+        'audio': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: mediaType,
+        ),
       }),
     );
     return DmMessage.fromJson(response.data as Map<String, dynamic>);
@@ -337,6 +347,17 @@ class SvibeApiClient {
       'jpg' || 'jpeg' => MediaType('image', 'jpeg'),
       'webp' => MediaType('image', 'webp'),
       _ => MediaType('image', 'png'),
+    };
+  }
+
+  MediaType _audioMediaType(String filename) {
+    final extension = filename.split('.').last.toLowerCase();
+    return switch (extension) {
+      'm4a' => MediaType('audio', 'mp4'),
+      'mp3' => MediaType('audio', 'mpeg'),
+      'ogg' || 'oga' => MediaType('audio', 'ogg'),
+      'webm' => MediaType('audio', 'webm'),
+      _ => MediaType('audio', 'wav'),
     };
   }
 }
