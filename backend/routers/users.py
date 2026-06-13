@@ -61,7 +61,6 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         username=payload.username,
         display_name=payload.display_name,
         bio=payload.bio,
-        profile_picture_url=payload.profile_picture_url,
         is_private=payload.is_private,
         message_privacy=payload.message_privacy,
         is_vip=payload.is_vip,

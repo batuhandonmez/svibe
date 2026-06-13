@@ -89,7 +89,8 @@ It also returns account privacy and DM privacy.
 `message_privacy`.
 
 `POST /users/me/photo` accepts multipart `photo` upload and stores the profile
-image under the S3 `profiles/` prefix.
+image under the S3 `profiles/` prefix, or under local media in development when
+S3 is not configured. Profile photos are not set by URL during account creation.
 
 Private accounts receive pending follow requests. Public accounts are followed
 immediately.

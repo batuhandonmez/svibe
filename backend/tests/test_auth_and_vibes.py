@@ -138,6 +138,22 @@ def test_profile_photo_upload_updates_user(monkeypatch):
         assert me.json()["profile_picture_url"].endswith("/avatar.png")
 
 
+def test_user_create_ignores_profile_photo_url():
+    with TestClient(app) as client:
+        response = client.post(
+            "/users",
+            json={
+                "username": _username("legacy_photo"),
+                "display_name": "Legacy Photo",
+                "profile_picture_url": "https://example.test/avatar.png",
+                "is_vip": True,
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["profile_picture_url"] is None
+
+
 def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
     deleted_audio_urls = []
     monkeypatch.setattr(
