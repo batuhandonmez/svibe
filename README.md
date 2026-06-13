@@ -80,6 +80,16 @@ On iOS, accept the local network prompt if it appears.
 
 ## Local Web Demo
 
+Fast path from the repo root:
+
+```powershell
+.\scripts\start_local_web_demo.ps1 -Restart
+```
+
+The script detects your LAN IP, starts the backend on `0.0.0.0:8000`, seeds
+local demo voices and DMs, starts Flutter web on `0.0.0.0:8096`, and prints the
+phone-friendly URL plus `demo_user / demo12345`.
+
 For an iPhone Safari demo, keep the computer and iPhone on the same Wi-Fi, then
 use the computer LAN IP in every command below. The example IP is
 `192.168.1.102`; replace it with your current value.
