@@ -1,5 +1,6 @@
 # backend/services/s3_storage.py
 from pathlib import Path
+from shutil import copyfileobj
 from typing import BinaryIO
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
@@ -39,6 +40,22 @@ def _has_s3_settings() -> bool:
             settings.AWS_S3_BUCKET_NAME,
         ]
     )
+
+
+def _has_any_s3_settings() -> bool:
+    return any(
+        [
+            settings.AWS_ACCESS_KEY_ID,
+            settings.AWS_SECRET_ACCESS_KEY,
+            settings.AWS_S3_BUCKET_NAME,
+        ]
+    )
+
+
+def _use_local_media_storage() -> bool:
+    if settings.ENVIRONMENT.lower() in {"production", "prod"}:
+        return False
+    return not _has_any_s3_settings()
 
 
 def _require_s3_settings() -> None:
@@ -115,6 +132,32 @@ def _audio_object_url(key: str) -> str:
     return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
 
 
+def _local_media_root() -> Path:
+    return Path(__file__).resolve().parents[1] / "local_media" / "uploads"
+
+
+def _local_media_url(key: str) -> str:
+    return f"{settings.LOCAL_MEDIA_BASE_URL.rstrip('/')}/media/uploads/{key}"
+
+
+def _key_from_local_media_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    marker = "/media/uploads/"
+    if marker not in parsed.path:
+        return None
+    return parsed.path.split(marker, 1)[1]
+
+
+def _save_local_upload(file_obj: BinaryIO, key: str) -> str:
+    destination = _local_media_root() / key
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    file_obj.seek(0)
+    with destination.open("wb") as out:
+        copyfileobj(file_obj, out)
+    file_obj.seek(0)
+    return _local_media_url(key)
+
+
 def _key_from_audio_url(audio_url: str) -> str:
     parsed = urlparse(audio_url)
     return parsed.path.lstrip("/")
@@ -144,6 +187,15 @@ def create_presigned_audio_url(audio_url: str, expires_in: int = 3600) -> str:
 
 
 def delete_audio_file(audio_url: str) -> None:
+    local_key = _key_from_local_media_url(audio_url)
+    if local_key is not None:
+        target = _local_media_root() / local_key
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+        return
+
     key = _key_from_audio_url(audio_url)
     try:
         _client().delete_object(Bucket=settings.AWS_S3_BUCKET_NAME, Key=key)
@@ -166,6 +218,9 @@ def _upload_audio_file_to_prefix(
     audio_file.file.seek(0)
 
     key = f"{prefix.strip('/')}/{user_id}/{uuid4()}{_extension(audio_file.filename)}"
+    if _use_local_media_storage():
+        return _save_local_upload(audio_file.file, key)
+
     extra_args = {"ContentType": audio_file.content_type or "application/octet-stream"}
 
     try:
@@ -210,6 +265,9 @@ def upload_profile_image(user_id: UUID, image_file: UploadFile) -> str:
         f"profiles/{user_id}/"
         f"{uuid4()}{_image_extension(image_file.filename, image_file.content_type)}"
     )
+    if _use_local_media_storage():
+        return _save_local_upload(image_file.file, key)
+
     extra_args = {"ContentType": image_file.content_type or "application/octet-stream"}
 
     try:

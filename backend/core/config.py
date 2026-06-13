@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "eu-central-1"
     AWS_S3_BUCKET_NAME: str | None = None
     AWS_S3_AUDIO_PREFIX: str = "vibes"
+    LOCAL_MEDIA_BASE_URL: str = "http://127.0.0.1:8000"
     MAX_AUDIO_FILE_SIZE_MB: int = 20
     DEFAULT_DAILY_VIBE_COUNT: int = 3
     VIP_DAILY_VIBE_COUNT: int = 30

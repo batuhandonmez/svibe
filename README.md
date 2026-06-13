@@ -90,6 +90,11 @@ The script detects your LAN IP, starts the backend on `0.0.0.0:8000`, seeds
 local demo voices and DMs, starts Flutter web on `0.0.0.0:8096`, and prints the
 phone-friendly URL plus `demo_user / demo12345`.
 
+When AWS S3 variables are omitted in development, new audio/profile uploads are
+stored under `backend/local_media/uploads` and served through `/media/uploads`.
+The launcher sets `LOCAL_MEDIA_BASE_URL` so those local files work from an
+iPhone on the same Wi-Fi.
+
 Stop the local backend and web demo when you are done:
 
 ```powershell

@@ -80,6 +80,7 @@ if (-not $LanIp) {
 
 $apiBaseUrl = "http://${LanIp}:${BackendPort}"
 $webUrl = "http://${LanIp}:${WebPort}"
+$env:LOCAL_MEDIA_BASE_URL = $apiBaseUrl
 
 if ($Restart) {
     foreach ($port in @($BackendPort, $WebPort)) {
