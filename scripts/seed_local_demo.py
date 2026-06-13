@@ -9,7 +9,7 @@ import wave
 from datetime import timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
@@ -23,6 +23,8 @@ from models.dm_message import DmMessage  # noqa: E402
 from models.dm_thread import DmThread  # noqa: E402
 from models.user import User  # noqa: E402
 from models.vibe import Vibe  # noqa: E402
+from models.vibe_listen import VibeListen  # noqa: E402
+from models.vibe_swipe import VibeSwipe  # noqa: E402
 
 
 DEMO_PASSWORD = "demo12345"
@@ -154,6 +156,7 @@ def main() -> None:
         }
         db.flush()
 
+        demo_vibe_ids = []
         for username, duration, freq, likes, golden, filename in DEMO_VIBES:
             path = media_dir / filename
             path.write_bytes(make_wav(freq, duration))
@@ -172,6 +175,22 @@ def main() -> None:
             vibe.swipe_right_count = likes
             vibe.is_golden_voice = golden
             vibe.expires_at = utc_now() + timedelta(days=7)
+            db.flush()
+            demo_vibe_ids.append(vibe.id)
+
+        if demo_vibe_ids:
+            db.execute(
+                delete(VibeListen).where(
+                    VibeListen.user_id == viewer.id,
+                    VibeListen.vibe_id.in_(demo_vibe_ids),
+                )
+            )
+            db.execute(
+                delete(VibeSwipe).where(
+                    VibeSwipe.user_id == viewer.id,
+                    VibeSwipe.vibe_id.in_(demo_vibe_ids),
+                )
+            )
 
         add_thread(
             db,
