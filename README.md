@@ -90,6 +90,12 @@ The script detects your LAN IP, starts the backend on `0.0.0.0:8000`, seeds
 local demo voices and DMs, starts Flutter web on `0.0.0.0:8096`, and prints the
 phone-friendly URL plus `demo_user / demo12345`.
 
+Stop the local backend and web demo when you are done:
+
+```powershell
+.\scripts\stop_local_web_demo.ps1
+```
+
 For an iPhone Safari demo, keep the computer and iPhone on the same Wi-Fi, then
 use the computer LAN IP in every command below. The example IP is
 `192.168.1.102`; replace it with your current value.

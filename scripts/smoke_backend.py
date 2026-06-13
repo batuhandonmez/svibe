@@ -41,6 +41,20 @@ def _request(
         raise RuntimeError(f"{method} {path} failed: {exc.reason}") from exc
 
 
+def _assert_url_reachable(url: str, *, timeout: float = 15) -> None:
+    req = request.Request(url, method="GET", headers={"Accept": "*/*"})
+    try:
+        with request.urlopen(req, timeout=timeout) as response:
+            if response.status >= 400:
+                raise RuntimeError(f"GET {url} failed: HTTP {response.status}")
+            response.read(1)
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"GET {url} failed: HTTP {exc.code} {body}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"GET {url} failed: {exc.reason}") from exc
+
+
 def _login(base_url: str, username: str, password: str) -> dict[str, Any]:
     return _request(
         base_url,
@@ -119,6 +133,12 @@ def main() -> int:
         raise RuntimeError(
             "Demo discover is empty. Run scripts/seed_local_demo.py first."
         )
+    if args.mode == "demo":
+        audio_url = discover["item"].get("audio_url")
+        if not audio_url:
+            raise RuntimeError(f"Demo discover item has no audio_url: {discover}")
+        _assert_url_reachable(audio_url)
+        checks.append("demo/audio_url")
     checks.append("vibes/discover/next")
 
     threads = _request(args.base_url, "GET", "/dm/threads", token=token)
