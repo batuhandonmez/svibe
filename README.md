@@ -89,6 +89,8 @@ Fast path from the repo root:
 The script detects your LAN IP, starts the backend on `0.0.0.0:8000`, seeds
 local demo voices and DMs, starts Flutter web on `0.0.0.0:8096`, and prints the
 phone-friendly URL plus `demo_user / demo12345`.
+Use the printed `Web:` URL on an iPhone connected to the same Wi-Fi. On this
+computer, `http://127.0.0.1:8096` should also work.
 
 When AWS S3 variables are omitted in development, new audio/profile uploads are
 stored under `backend/local_media/uploads` and served through `/media/uploads`.
@@ -101,9 +103,10 @@ Stop the local backend and web demo when you are done:
 .\scripts\stop_local_web_demo.ps1
 ```
 
-For an iPhone Safari demo, keep the computer and iPhone on the same Wi-Fi, then
-use the computer LAN IP in every command below. The example IP is
-`192.168.1.102`; replace it with your current value.
+If you need to run the iPhone Safari demo manually instead of using the fast
+path, keep the computer and iPhone on the same Wi-Fi, then use the computer LAN
+IP in every command below. The example IP is `192.168.1.102`; replace it with
+your current value.
 
 ```powershell
 # Find the computer LAN IPv4 address
@@ -147,9 +150,9 @@ demo_user / demo12345
 ```
 
 In the web/mobile login screen, the demo credential card fills and submits this
-account with one tap after `scripts\seed_demo.py` has been run. For a newly
-created account, use `scripts\seed_local_demo.py --username <your_username>` to
-add local demo feed and DM data.
+account with one tap after `scripts\seed_local_demo.py` has been run. For a
+newly created account, use `scripts\seed_local_demo.py --username
+<your_username>` to add local demo feed and DM data.
 
 Figma redesign file:
 
