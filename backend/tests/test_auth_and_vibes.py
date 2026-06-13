@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 import routers.dm as dm_router
+import routers.users as users_router
 import routers.vibes as vibes_router
 from fastapi.testclient import TestClient
 from sqlalchemy import text, update
@@ -102,6 +103,39 @@ def test_user_status_resets_expired_daily_vibe_count():
         assert status_payload["daily_vibe_limit"] == 30
         assert status_payload["daily_vibe_count"] == 30
         assert status_payload["can_upload_vibe"] is True
+
+
+def test_profile_photo_upload_updates_user(monkeypatch):
+    uploaded = {}
+
+    def fake_upload_profile_image(user_id, photo):
+        uploaded["user_id"] = str(user_id)
+        uploaded["filename"] = photo.filename
+        uploaded["content_type"] = photo.content_type
+        return f"https://cdn.example.test/profiles/{user_id}/avatar.png"
+
+    monkeypatch.setattr(users_router, "upload_profile_image", fake_upload_profile_image)
+
+    with TestClient(app) as client:
+        payload = _register(client, "photo", is_vip=True)
+
+        response = client.post(
+            "/users/me/photo",
+            headers=_headers(payload),
+            files={"photo": ("avatar.png", b"fake-png", "image/png")},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["profile_picture_url"].endswith("/avatar.png")
+        assert uploaded == {
+            "user_id": payload["user"]["id"],
+            "filename": "avatar.png",
+            "content_type": "image/png",
+        }
+
+        me = client.get("/auth/me", headers=_headers(payload))
+        assert me.status_code == 200
+        assert me.json()["profile_picture_url"].endswith("/avatar.png")
 
 
 def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
