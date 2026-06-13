@@ -57,3 +57,9 @@ def test_profile_image_upload_uses_local_media_when_s3_is_not_configured(
     assert url.endswith(".png")
     local_key = url.split("/media/uploads/", 1)[1]
     assert (tmp_path / local_key).read_bytes() == b"local-image"
+
+
+def test_delete_nonlocal_audio_is_noop_without_s3_settings(monkeypatch, tmp_path):
+    _configure_local_storage(monkeypatch, tmp_path)
+
+    storage.delete_audio_file("https://cdn.example.test/audio/legacy.wav")

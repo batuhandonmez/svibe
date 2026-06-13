@@ -196,6 +196,9 @@ def delete_audio_file(audio_url: str) -> None:
             pass
         return
 
+    if not _has_s3_settings():
+        return
+
     key = _key_from_audio_url(audio_url)
     try:
         _client().delete_object(Bucket=settings.AWS_S3_BUCKET_NAME, Key=key)
