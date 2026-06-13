@@ -93,14 +93,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         _isLoading = false;
       });
       if (next != null) {
-        await api.startListening(token, next.id);
+        final listen = await api.startListening(token, next.id);
         await _player.setUrl(next.audioUrl);
-        _unlockController.forward(from: 0);
-        _unlockTimer = Timer(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() => _isLocked = false);
-          }
-        });
+        _startUnlockCountdown(_unlockDelayFor(next, listen));
         unawaited(
           _player.play().catchError((Object _) {
             // Browsers may block autoplay until the user taps. The listening
@@ -125,6 +120,39 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     } finally {
       _isAdvancing = false;
     }
+  }
+
+  Duration _unlockDelayFor(VibeFeedItem item, ListenStartResult listen) {
+    if (item.canSwipeNow) {
+      return Duration.zero;
+    }
+    final unlockAt = listen.startedAt.add(
+      Duration(seconds: listen.canSwipeAfterSeconds),
+    );
+    final remaining = unlockAt.difference(DateTime.now());
+    if (remaining.isNegative || remaining == Duration.zero) {
+      return Duration.zero;
+    }
+    return remaining;
+  }
+
+  void _startUnlockCountdown(Duration delay) {
+    _unlockTimer?.cancel();
+    if (delay == Duration.zero) {
+      _unlockController.value = 1;
+      if (mounted) {
+        setState(() => _isLocked = false);
+      }
+      return;
+    }
+
+    _unlockController.duration = delay;
+    _unlockController.forward(from: 0);
+    _unlockTimer = Timer(delay, () {
+      if (mounted) {
+        setState(() => _isLocked = false);
+      }
+    });
   }
 
   Future<void> _togglePlayback() async {
@@ -441,9 +469,8 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                                     Text(
                                       '@${item.username}',
                                       style: TextStyle(
-                                        color: theme
-                                            .colorScheme
-                                            .onSurfaceVariant,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -487,8 +514,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                                   style: theme.textTheme.labelLarge?.copyWith(
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 2.2,
-                                    color:
-                                        theme.colorScheme.onSurfaceVariant,
+                                    color: theme.colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ),

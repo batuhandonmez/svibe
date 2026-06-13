@@ -121,8 +121,9 @@ class SvibeApiClient {
     return VibeFeedItem.fromJson(item);
   }
 
-  Future<void> startListening(String token, String vibeId) async {
-    await _post('/vibes/$vibeId/listen/start', token: token);
+  Future<ListenStartResult> startListening(String token, String vibeId) async {
+    final response = await _post('/vibes/$vibeId/listen/start', token: token);
+    return ListenStartResult.fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<SwipeResult> swipeVibe(

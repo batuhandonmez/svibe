@@ -189,6 +189,26 @@ class SwipeResult {
   }
 }
 
+class ListenStartResult {
+  const ListenStartResult({
+    required this.vibeId,
+    required this.startedAt,
+    required this.canSwipeAfterSeconds,
+  });
+
+  final String vibeId;
+  final DateTime startedAt;
+  final int canSwipeAfterSeconds;
+
+  factory ListenStartResult.fromJson(Map<String, dynamic> json) {
+    return ListenStartResult(
+      vibeId: json['vibe_id'] as String,
+      startedAt: _date(json['started_at']) ?? DateTime.now(),
+      canSwipeAfterSeconds: json['can_swipe_after_seconds'] as int? ?? 3,
+    );
+  }
+}
+
 class DmPeer {
   const DmPeer({
     required this.id,
