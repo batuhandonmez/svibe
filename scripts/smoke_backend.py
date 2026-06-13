@@ -115,11 +115,19 @@ def main() -> int:
     discover = _request(args.base_url, "GET", "/vibes/discover/next", token=token)
     if "item" not in discover:
         raise RuntimeError(f"Unexpected discover response: {discover}")
+    if args.mode == "demo" and discover["item"] is None:
+        raise RuntimeError(
+            "Demo discover is empty. Run scripts/seed_local_demo.py first."
+        )
     checks.append("vibes/discover/next")
 
     threads = _request(args.base_url, "GET", "/dm/threads", token=token)
     if "items" not in threads:
         raise RuntimeError(f"Unexpected DM threads response: {threads}")
+    if args.mode == "demo" and not threads["items"]:
+        raise RuntimeError(
+            "Demo DM inbox is empty. Run scripts/seed_local_demo.py first."
+        )
     checks.append("dm/threads")
 
     print("Smoke OK:", ", ".join(checks))
