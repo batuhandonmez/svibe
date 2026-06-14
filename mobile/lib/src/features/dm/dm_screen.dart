@@ -295,6 +295,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   late Future<List<DmMessage>> _messagesFuture;
   StreamSubscription<ProcessingState>? _audioStateSubscription;
   bool _isSendingAudio = false;
+  bool _isSendingText = false;
   bool _isRecording = false;
   String? _playingMessageId;
   int _recordSeconds = 0;
@@ -334,14 +335,27 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   Future<void> _send() async {
     final token = ref.read(authControllerProvider).token;
     final text = _controller.text.trim();
-    if (token == null || text.isEmpty) {
+    if (token == null || text.isEmpty || _isSendingText) {
       return;
     }
-    _controller.clear();
-    await ref
-        .read(apiClientProvider)
-        .sendDmMessage(token, widget.thread.id, text: text);
-    setState(() => _messagesFuture = _loadMessages());
+    setState(() => _isSendingText = true);
+    try {
+      await ref
+          .read(apiClientProvider)
+          .sendDmMessage(token, widget.thread.id, text: text);
+      if (mounted) {
+        _controller.clear();
+        setState(() => _messagesFuture = _loadMessages());
+      }
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        _show(exception.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingText = false);
+      }
+    }
   }
 
   Future<void> _toggleVoiceDm() async {
@@ -526,6 +540,12 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
                   if (snapshot.connectionState != ConnectionState.done) {
                     return const Center(child: CircularProgressIndicator());
                   }
+                  if (snapshot.hasError) {
+                    return _CenteredMessage(
+                      message:
+                          'Messages could not load. Pull back and try again.',
+                    );
+                  }
                   final messages = snapshot.data ?? [];
                   if (messages.isEmpty) {
                     return const _EmptyConversation();
@@ -553,6 +573,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
               controller: _controller,
               isRecording: _isRecording,
               recordSeconds: _recordSeconds,
+              isSendingText: _isSendingText,
               isSendingAudio: _isSendingAudio,
               onVoiceTap: _toggleVoiceDm,
               onSend: _send,
@@ -652,6 +673,7 @@ class _MessageComposer extends StatelessWidget {
     required this.controller,
     required this.isRecording,
     required this.recordSeconds,
+    required this.isSendingText,
     required this.isSendingAudio,
     required this.onVoiceTap,
     required this.onSend,
@@ -660,75 +682,99 @@ class _MessageComposer extends StatelessWidget {
   final TextEditingController controller;
   final bool isRecording;
   final int recordSeconds;
+  final bool isSendingText;
   final bool isSendingAudio;
   final VoidCallback onVoiceTap;
   final VoidCallback onSend;
 
+  bool get _busy => isSendingText || isSendingAudio;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Attach',
-            onPressed: () {},
-            icon: const Icon(Icons.add, color: Color(0xFFD5D0C8), size: 30),
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              minLines: 1,
-              maxLines: 3,
-              style: const TextStyle(color: Color(0xFFEDEAE4), fontSize: 16),
-              decoration: InputDecoration(
-                hintText: isRecording
-                    ? 'Recording ${recordSeconds}s'
-                    : 'Type a message...',
-                hintStyle: const TextStyle(color: Color(0xFF77716C)),
-                enabledBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Color(0xFF2A2827)),
-                ),
-                focusedBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Color(0xFFE0DCD4)),
-                ),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final hasText = controller.text.trim().isNotEmpty;
+        final icon = isSendingText
+            ? null
+            : hasText
+            ? Icons.arrow_upward
+            : isRecording
+            ? Icons.stop
+            : Icons.mic;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Attach',
+                onPressed: _busy ? null : () {},
+                icon: const Icon(Icons.add, color: Color(0xFFD5D0C8), size: 30),
               ),
-              onSubmitted: (_) => onSend(),
-            ),
-          ),
-          const SizedBox(width: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: isSendingAudio ? null : onVoiceTap,
-            onLongPress: onSend,
-            child: Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: const Color(0xFF3A3836),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: .24),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  enabled: !_busy,
+                  minLines: 1,
+                  maxLines: 3,
+                  style: const TextStyle(
+                    color: Color(0xFFEDEAE4),
+                    fontSize: 16,
                   ),
-                ],
-              ),
-              child: isSendingAudio
-                  ? const Padding(
-                      padding: EdgeInsets.all(18),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      isRecording ? Icons.stop : Icons.mic,
-                      color: const Color(0xFFE8E4DE),
-                      size: 28,
+                  decoration: InputDecoration(
+                    hintText: isRecording
+                        ? 'Recording ${recordSeconds}s'
+                        : 'Type a message...',
+                    hintStyle: const TextStyle(color: Color(0xFF77716C)),
+                    enabledBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF2A2827)),
                     ),
-            ),
+                    focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFE0DCD4)),
+                    ),
+                  ),
+                  onSubmitted: (_) => onSend(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: _busy ? null : (hasText ? onSend : onVoiceTap),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: hasText
+                        ? const Color(0xFFE8E4DE)
+                        : const Color(0xFF3A3836),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: .24),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: _busy && !isRecording
+                      ? const Padding(
+                          padding: EdgeInsets.all(18),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          icon,
+                          color: hasText
+                              ? const Color(0xFF111111)
+                              : const Color(0xFFE8E4DE),
+                          size: 28,
+                        ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

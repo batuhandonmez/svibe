@@ -182,16 +182,22 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     if (token == null) {
       return;
     }
-    await ref
-        .read(apiClientProvider)
-        .swipeVibe(
-          token,
-          item.id,
-          direction: 'like',
-          goldenUnlockConfirmed: true,
-        );
-    ref.invalidate(userStatusProvider);
-    await _loadNext();
+    try {
+      await ref
+          .read(apiClientProvider)
+          .swipeVibe(
+            token,
+            item.id,
+            direction: 'like',
+            goldenUnlockConfirmed: true,
+          );
+      ref.invalidate(userStatusProvider);
+      await _loadNext();
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        setState(() => _error = exception.message);
+      }
+    }
   }
 
   Future<void> _showGoldenVoiceRitual(VibeFeedItem item) {
