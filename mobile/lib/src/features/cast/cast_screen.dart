@@ -25,6 +25,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   late final MotionTrigger _castMotion;
   bool _isUploading = false;
   bool _isRecording = false;
+  bool _isStoppingRecording = false;
   Uint8List? _recordedBytes;
   String? _recordedPath;
   int _recordSeconds = 0;
@@ -52,73 +53,104 @@ class _CastScreenState extends ConsumerState<CastScreen> {
   }
 
   Future<void> _startRecording() async {
-    if (_isUploading || _isRecording) {
+    if (_isUploading || _isRecording || _isStoppingRecording) {
       return;
     }
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
-      _show('Microphone permission is needed to record.');
-      return;
-    }
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        _show('Microphone permission is needed to record.');
+        return;
+      }
 
-    final path = await _recordPath();
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      ),
-      path: path,
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _isRecording = true;
-      _recordedBytes = null;
-      _recordedPath = null;
-      _recordSeconds = 0;
-    });
-    _recordTimer?.cancel();
-    _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      final path = await _recordPath();
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: path,
+      );
       if (!mounted) {
         return;
       }
-      final next = _recordSeconds + 1;
-      setState(() => _recordSeconds = next);
-      if (next >= 30) {
-        await _stopRecording(castAfterStop: true);
+      setState(() {
+        _isRecording = true;
+        _recordedBytes = null;
+        _recordedPath = null;
+        _recordSeconds = 0;
+      });
+      _recordTimer?.cancel();
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+        if (!mounted) {
+          return;
+        }
+        final next = _recordSeconds + 1;
+        setState(() => _recordSeconds = next);
+        if (next >= 30) {
+          await _stopRecording(castAfterStop: true);
+        }
+      });
+    } on Object {
+      if (mounted) {
+        _show('Recording could not start. Check microphone permission.');
       }
-    });
+    }
   }
 
   Future<void> _stopRecording({bool castAfterStop = true}) async {
-    if (!_isRecording) {
+    if (!_isRecording || _isStoppingRecording) {
       return;
     }
     _recordTimer?.cancel();
-    final path = await _recorder.stop();
-    if (!mounted) {
+    _isStoppingRecording = true;
+    try {
+      final path = await _recorder.stop();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isRecording = false);
+
+      if (path == null) {
+        _show('Recording could not be saved.');
+        return;
+      }
+
+      Uint8List? bytes;
+      if (!kIsWeb) {
+        bytes = await File(path).readAsBytes();
+      }
+      setState(() {
+        _recordedPath = path;
+        _recordedBytes = bytes;
+      });
+
+      if (castAfterStop) {
+        await _cast();
+      }
+    } on Object {
+      if (mounted) {
+        setState(() => _isRecording = false);
+        _show('Recording could not be saved.');
+      }
+    } finally {
+      _isStoppingRecording = false;
+    }
+  }
+
+  Future<void> _toggleRecordButton() async {
+    if (_isUploading || _isStoppingRecording) {
       return;
     }
-    setState(() => _isRecording = false);
-
-    if (path == null) {
-      _show('Recording could not be saved.');
+    if (kIsWeb) {
+      await _pickAudioFallback();
       return;
     }
-
-    Uint8List? bytes;
-    if (!kIsWeb) {
-      bytes = await File(path).readAsBytes();
-    }
-    setState(() {
-      _recordedPath = path;
-      _recordedBytes = bytes;
-    });
-
-    if (castAfterStop) {
-      await _cast();
+    if (_isRecording) {
+      await _stopRecording(castAfterStop: true);
+    } else {
+      await _startRecording();
     }
   }
 
@@ -298,7 +330,9 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                         const Spacer(flex: 4),
                         Text(
                           canCast
-                              ? 'Hold to capture, release to cast'
+                              ? kIsWeb
+                                    ? 'Tap to choose an audio file'
+                                    : 'Tap to record, tap again to cast'
                               : 'Find a Golden Voice to speak again',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
@@ -309,9 +343,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                         ),
                         const SizedBox(height: 18),
                         GestureDetector(
-                          onTap: kIsWeb && canCast && !_isUploading
-                              ? _pickAudioFallback
-                              : null,
+                          onTap: canCast ? _toggleRecordButton : null,
                           onLongPressStart: canCast
                               ? (_) => _startRecording()
                               : null,
