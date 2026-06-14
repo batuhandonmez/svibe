@@ -259,6 +259,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     : _item == null
                     ? _EmptyFeed(onCast: widget.onOpenCast)
                     : _DiscoveryCard(
+                        key: ValueKey(_item!.id),
                         item: _item!,
                         player: _player,
                         waveController: _waveController,
@@ -322,6 +323,7 @@ class _DiscoveryCard extends StatefulWidget {
     required this.onDislike,
     required this.onOpenProfile,
     required this.onTogglePlayback,
+    super.key,
   });
 
   final VibeFeedItem item;
@@ -339,7 +341,7 @@ class _DiscoveryCard extends StatefulWidget {
 }
 
 class _DiscoveryCardState extends State<_DiscoveryCard> {
-  Offset _drag = Offset.zero;
+  final ValueNotifier<Offset> _drag = ValueNotifier<Offset>(Offset.zero);
 
   VibeFeedItem get item => widget.item;
   AudioPlayer get player => widget.player;
@@ -351,10 +353,14 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
   VoidCallback get onOpenProfile => widget.onOpenProfile;
   VoidCallback get onTogglePlayback => widget.onTogglePlayback;
 
+  @override
+  void dispose() {
+    _drag.dispose();
+    super.dispose();
+  }
+
   void _resetDrag() {
-    if (mounted) {
-      setState(() => _drag = Offset.zero);
-    }
+    _drag.value = Offset.zero;
   }
 
   @override
@@ -363,33 +369,28 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
     final name = item.displayName?.isNotEmpty == true
         ? item.displayName!
         : item.username;
-    final stamp = _drag.dx > 32
-        ? _SwipeStampKind.like
-        : _drag.dx < -32
-        ? _SwipeStampKind.pass
-        : null;
     return GestureDetector(
       onTap: onOpenProfile,
       onPanUpdate: isLocked
           ? null
           : (details) {
-              setState(() {
-                _drag = Offset(
-                  (_drag.dx + details.delta.dx).clamp(-130.0, 130.0),
-                  (_drag.dy + details.delta.dy).clamp(-70.0, 70.0),
-                );
-              });
+              final drag = _drag.value;
+              _drag.value = Offset(
+                (drag.dx + details.delta.dx).clamp(-130.0, 130.0),
+                (drag.dy + details.delta.dy).clamp(-70.0, 70.0),
+              );
             },
       onPanCancel: _resetDrag,
       onPanEnd: (details) {
         final velocity = details.velocity.pixelsPerSecond;
-        if (_drag.dx > 88 || velocity.dx > 360) {
+        final drag = _drag.value;
+        if (drag.dx > 88 || velocity.dx > 360) {
           _resetDrag();
           onLike();
-        } else if (_drag.dx < -88 || velocity.dx < -360) {
+        } else if (drag.dx < -88 || velocity.dx < -360) {
           _resetDrag();
           onDislike();
-        } else if (!isLocked && (_drag.dy < -52 || velocity.dy < -300)) {
+        } else if (!isLocked && (drag.dy < -52 || velocity.dy < -300)) {
           _resetDrag();
           onOpenProfile();
         } else {
@@ -404,127 +405,148 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
             child: SizedBox(
               width: cardWidth,
               height: cardHeight,
-              child: Transform.translate(
-                offset: Offset(_drag.dx, 0),
+              child: ValueListenableBuilder<Offset>(
+                valueListenable: _drag,
+                builder: (context, drag, child) {
+                  final stamp = drag.dx > 32
+                      ? _SwipeStampKind.like
+                      : drag.dx < -32
+                      ? _SwipeStampKind.pass
+                      : null;
+                  return Transform.translate(
+                    offset: Offset(drag.dx, 0),
+                    child: Stack(
+                      children: [
+                        child!,
+                        if (stamp != null)
+                          Positioned(
+                            top: 92,
+                            left: stamp == _SwipeStampKind.pass ? 24 : null,
+                            right: stamp == _SwipeStampKind.like ? 24 : null,
+                            child: _SwipeStamp(
+                              kind: stamp,
+                              opacity: (drag.dx.abs() / 120).clamp(0.0, 1.0),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
                 child: Stack(
                   children: [
-                    RepaintBoundary(
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: theme.extension<SvibeColors>()!.elevated,
-                          border: Border.all(
-                            color: theme.colorScheme.outline.withValues(
-                              alpha: .72,
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: theme.extension<SvibeColors>()!.elevated,
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: .72,
+                          ),
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.cardRadius,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: theme.brightness == Brightness.dark
+                                  ? 0.28
+                                  : 0.08,
                             ),
+                            blurRadius: 22,
+                            offset: const Offset(0, 14),
                           ),
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.cardRadius,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: theme.brightness == Brightness.dark
-                                    ? 0.28
-                                    : 0.08,
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              ProfileAvatar(
+                                username: item.username,
+                                imageUrl: item.profilePictureUrl,
+                                radius: 26,
                               ),
-                              blurRadius: 22,
-                              offset: const Offset(0, 14),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                ProfileAvatar(
-                                  username: item.username,
-                                  imageUrl: item.profilePictureUrl,
-                                  radius: 26,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.titleMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                      ),
-                                      Text(
-                                        '@${item.username}',
-                                        style: TextStyle(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (item.isGoldenVoice) const _GoldenChip(),
-                                if (!item.isGoldenVoice)
-                                  _DurationPill(duration: item.duration),
-                              ],
-                            ),
-                            const Spacer(),
-                            StreamBuilder<PlayerState>(
-                              stream: player.playerStateStream,
-                              builder: (context, snapshot) {
-                                final playing =
-                                    snapshot.data?.playing ?? player.playing;
-                                return InkWell(
-                                  borderRadius: BorderRadius.circular(180),
-                                  onTap: onTogglePlayback,
-                                  child: RepaintBoundary(
-                                    child: _WaveStage(
-                                      controller: waveController,
-                                      active: playing,
-                                      golden: item.isGoldenVoice,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                          ),
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
-                            const Spacer(),
-                            Row(
-                              children: [
-                                _InlineSignalIcon(
-                                  icon: Icons.close,
-                                  enabled: !isLocked,
-                                  onTap: onDislike,
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    isLocked ? 'LISTENING' : 'SWIPE',
-                                    textAlign: TextAlign.center,
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 2.2,
-                                      color: theme.colorScheme.onSurfaceVariant,
+                                    Text(
+                                      '@${item.username}',
+                                      style: TextStyle(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
+                                  ],
+                                ),
+                              ),
+                              if (item.isGoldenVoice) const _GoldenChip(),
+                              if (!item.isGoldenVoice)
+                                _DurationPill(duration: item.duration),
+                            ],
+                          ),
+                          const Spacer(),
+                          StreamBuilder<PlayerState>(
+                            stream: player.playerStateStream,
+                            builder: (context, snapshot) {
+                              final playing =
+                                  snapshot.data?.playing ?? player.playing;
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(180),
+                                onTap: onTogglePlayback,
+                                child: RepaintBoundary(
+                                  child: _WaveStage(
+                                    controller: waveController,
+                                    active: playing,
+                                    golden: item.isGoldenVoice,
                                   ),
                                 ),
-                                _InlineSignalIcon(
-                                  icon: Icons.favorite_border,
-                                  enabled: !isLocked,
-                                  onTap: onLike,
+                              );
+                            },
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              _InlineSignalIcon(
+                                icon: Icons.close,
+                                enabled: !isLocked,
+                                onTap: onDislike,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  isLocked ? 'LISTENING' : 'SWIPE',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 2.2,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            _ProgressBar(player: player),
-                          ],
-                        ),
+                              ),
+                              _InlineSignalIcon(
+                                icon: Icons.favorite_border,
+                                enabled: !isLocked,
+                                onTap: onLike,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _ProgressBar(player: player),
+                        ],
                       ),
                     ),
                     if (isLocked)
@@ -543,16 +565,6 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                               },
                             ),
                           ),
-                        ),
-                      ),
-                    if (stamp != null)
-                      Positioned(
-                        top: 92,
-                        left: stamp == _SwipeStampKind.pass ? 24 : null,
-                        right: stamp == _SwipeStampKind.like ? 24 : null,
-                        child: _SwipeStamp(
-                          kind: stamp,
-                          opacity: (_drag.dx.abs() / 120).clamp(0.0, 1.0),
                         ),
                       ),
                   ],
