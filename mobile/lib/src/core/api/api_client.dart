@@ -228,6 +228,15 @@ class SvibeApiClient {
         .toList();
   }
 
+  Future<DmThread> createDmThread(String token, String userId) async {
+    final response = await _post(
+      '/dm/threads',
+      token: token,
+      data: {'user_id': userId},
+    );
+    return DmThread.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<List<DmMessage>> dmMessages(String token, String threadId) async {
     final response = await _get('/dm/threads/$threadId/messages', token: token);
     final data = response.data as Map<String, dynamic>;

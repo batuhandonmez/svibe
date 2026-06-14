@@ -15,7 +15,9 @@ import '../../core/models/svibe_models.dart';
 import '../auth/auth_controller.dart';
 
 class DmInboxScreen extends ConsumerStatefulWidget {
-  const DmInboxScreen({super.key});
+  const DmInboxScreen({this.initialThread, super.key});
+
+  final DmThread? initialThread;
 
   @override
   ConsumerState<DmInboxScreen> createState() => _DmInboxScreenState();
@@ -23,6 +25,12 @@ class DmInboxScreen extends ConsumerStatefulWidget {
 
 class _DmInboxScreenState extends ConsumerState<DmInboxScreen> {
   DmThread? _selectedThread;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedThread = widget.initialThread;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +59,18 @@ class _DmInbox extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _InboxTopBar(onBack: () => Navigator.of(context).maybePop()),
+            _InboxTopBar(
+              onBack: () => Navigator.of(context).maybePop(),
+              onNewMessage: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Open a profile from the feed to start a DM.',
+                    ),
+                  ),
+                );
+              },
+            ),
             Expanded(
               child: token == null
                   ? const _CenteredMessage(message: 'Log in to see messages.')
@@ -101,9 +120,10 @@ class _DmInbox extends ConsumerWidget {
 }
 
 class _InboxTopBar extends StatelessWidget {
-  const _InboxTopBar({required this.onBack});
+  const _InboxTopBar({required this.onBack, required this.onNewMessage});
 
   final VoidCallback onBack;
+  final VoidCallback onNewMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +157,7 @@ class _InboxTopBar extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'New message',
-            onPressed: () {},
+            onPressed: onNewMessage,
             icon: const Icon(
               Icons.edit_square,
               color: Color(0xFFEDEAE4),

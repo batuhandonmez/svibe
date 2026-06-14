@@ -10,6 +10,7 @@ import '../../core/motion/motion_trigger.dart';
 import '../../core/models/svibe_models.dart';
 import '../../core/theme/app_theme.dart';
 import '../auth/auth_controller.dart';
+import '../dm/dm_screen.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({
@@ -1179,10 +1180,51 @@ class _GoldenRitualPainter extends CustomPainter {
   bool shouldRepaint(covariant _GoldenRitualPainter oldDelegate) => false;
 }
 
-class _ProfilePreview extends StatelessWidget {
+class _ProfilePreview extends ConsumerStatefulWidget {
   const _ProfilePreview({required this.item});
 
   final VibeFeedItem item;
+
+  @override
+  ConsumerState<_ProfilePreview> createState() => _ProfilePreviewState();
+}
+
+class _ProfilePreviewState extends ConsumerState<_ProfilePreview> {
+  bool _isStartingDm = false;
+
+  VibeFeedItem get item => widget.item;
+
+  Future<void> _startDm() async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null || _isStartingDm) {
+      return;
+    }
+    setState(() => _isStartingDm = true);
+    try {
+      final thread = await ref
+          .read(apiClientProvider)
+          .createDmThread(token, item.userId);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => DmInboxScreen(initialThread: thread),
+        ),
+      );
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingDm = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1237,6 +1279,18 @@ class _ProfilePreview extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _isStartingDm ? null : _startDm,
+            icon: _isStartingDm
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chat_bubble_outline),
+            label: Text(_isStartingDm ? 'Opening...' : 'Message'),
           ),
         ],
       ),
