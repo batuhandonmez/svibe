@@ -201,6 +201,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
         _recordedPath = null;
         _recordSeconds = 0;
       });
+      Navigator.of(context).pop(true);
     } on SvibeApiException catch (exception) {
       if (mounted) {
         _show(exception.message);

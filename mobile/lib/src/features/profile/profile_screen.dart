@@ -14,7 +14,9 @@ import '../dm/dm_screen.dart';
 import '../feed/feed_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({this.refreshTick = 0, super.key});
+
+  final int refreshTick;
 
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
@@ -29,6 +31,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _vibesFuture ??= _loadVibes();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick != widget.refreshTick) {
+      _refreshVibes();
+    }
   }
 
   Future<List<VibeFeedItem>> _loadVibes() {
@@ -118,11 +128,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 final vibes = snapshot.data ?? [];
                 if (vibes.isEmpty) {
                   return _EmptyVibes(
-                    onCastHint: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const CastScreen(),
-                      ),
-                    ),
+                    onCastHint: () async {
+                      final didCast = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute<bool>(
+                          builder: (_) => const CastScreen(),
+                        ),
+                      );
+                      if (didCast == true && context.mounted) {
+                        _refreshVibes();
+                      }
+                    },
                   );
                 }
                 return _RecentArchiveList(vibes: vibes);

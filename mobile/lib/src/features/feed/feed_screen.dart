@@ -35,6 +35,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   bool _isLoading = true;
   bool _isLocked = true;
   bool _isAdvancing = false;
+  bool _isSwipeSubmitting = false;
   String? _error;
   Timer? _unlockTimer;
 
@@ -79,6 +80,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     setState(() {
       _isLoading = true;
       _isLocked = true;
+      _isSwipeSubmitting = false;
       _error = null;
     });
     try {
@@ -93,9 +95,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         _isLoading = false;
       });
       if (next != null) {
-        final listen = await api.startListening(token, next.id);
+        await api.startListening(token, next.id);
         await _player.setUrl(next.audioUrl);
-        _startUnlockCountdown(_unlockDelayFor(next, listen));
+        _startUnlockCountdown();
         unawaited(
           _player.play().catchError((Object _) {
             // Browsers may block autoplay until the user taps. The listening
@@ -122,30 +124,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     }
   }
 
-  Duration _unlockDelayFor(VibeFeedItem item, ListenStartResult listen) {
-    if (item.canSwipeNow) {
-      return Duration.zero;
-    }
-    final unlockAt = listen.startedAt.add(
-      Duration(seconds: listen.canSwipeAfterSeconds),
-    );
-    final remaining = unlockAt.difference(DateTime.now());
-    if (remaining.isNegative || remaining == Duration.zero) {
-      return Duration.zero;
-    }
-    return remaining;
-  }
-
-  void _startUnlockCountdown(Duration delay) {
+  void _startUnlockCountdown() {
     _unlockTimer?.cancel();
-    if (delay == Duration.zero) {
-      _unlockController.value = 1;
-      if (mounted) {
-        setState(() => _isLocked = false);
-      }
-      return;
-    }
-
+    const delay = Duration(seconds: 3);
     _unlockController.duration = delay;
     _unlockController.forward(from: 0);
     _unlockTimer = Timer(delay, () {
@@ -166,9 +147,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   Future<void> _swipe(String direction) async {
     final item = _item;
     final token = ref.read(authControllerProvider).token;
-    if (item == null || token == null || _isLocked) {
+    if (item == null || token == null || _isLocked || _isSwipeSubmitting) {
       return;
     }
+    setState(() {
+      _isSwipeSubmitting = true;
+      _error = null;
+    });
     try {
       final result = await ref
           .read(apiClientProvider)
@@ -177,13 +162,17 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         return;
       }
       if (result.goldenVoiceUnlockPending) {
+        setState(() => _isSwipeSubmitting = false);
         await _showGoldenVoiceRitual(item);
       } else {
         await _loadNext();
       }
     } on SvibeApiException catch (exception) {
       if (mounted) {
-        setState(() => _error = exception.message);
+        setState(() {
+          _error = exception.message;
+          _isSwipeSubmitting = false;
+        });
       }
     }
   }
@@ -267,7 +256,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                         player: _player,
                         waveController: _waveController,
                         unlockController: _unlockController,
-                        isLocked: _isLocked,
+                        isLocked: _isLocked || _isSwipeSubmitting,
                         onLike: () => _swipe('like'),
                         onDislike: () => _swipe('dislike'),
                         onOpenProfile: _openProfileIntent,
@@ -372,7 +361,6 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
         : _drag.dx < -32
         ? _SwipeStampKind.pass
         : null;
-    final rotation = (_drag.dx / 900).clamp(-0.10, 0.10);
     return GestureDetector(
       onTap: onOpenProfile,
       onPanUpdate: isLocked
@@ -409,140 +397,144 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
             child: SizedBox(
               width: cardWidth,
               height: cardHeight,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOutCubic,
-                transform: Matrix4.identity()
-                  ..translate(_drag.dx, _drag.dy)
-                  ..rotateZ(rotation),
+              child: Transform.translate(
+                offset: Offset(_drag.dx, 0),
                 child: Stack(
                   children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: theme.extension<SvibeColors>()!.elevated,
-                        border: Border.all(
-                          color: theme.colorScheme.outline.withValues(
-                            alpha: .72,
-                          ),
-                        ),
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.cardRadius,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: theme.brightness == Brightness.dark
-                                  ? 0.34
-                                  : 0.10,
+                    RepaintBoundary(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: theme.extension<SvibeColors>()!.elevated,
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: .72,
                             ),
-                            blurRadius: 38,
-                            offset: const Offset(0, 24),
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              ProfileAvatar(
-                                username: item.username,
-                                imageUrl: item.profilePictureUrl,
-                                radius: 26,
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.cardRadius,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: theme.brightness == Brightness.dark
+                                    ? 0.28
+                                    : 0.08,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                    ),
-                                    Text(
-                                      '@${item.username}',
-                                      style: TextStyle(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                        fontWeight: FontWeight.w700,
+                              blurRadius: 22,
+                              offset: const Offset(0, 14),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                ProfileAvatar(
+                                  username: item.username,
+                                  imageUrl: item.profilePictureUrl,
+                                  radius: 26,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w900,
+                                            ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (item.isGoldenVoice) const _GoldenChip(),
-                              if (!item.isGoldenVoice)
-                                _DurationPill(duration: item.duration),
-                            ],
-                          ),
-                          const Spacer(),
-                          StreamBuilder<PlayerState>(
-                            stream: player.playerStateStream,
-                            builder: (context, snapshot) {
-                              final playing =
-                                  snapshot.data?.playing ?? player.playing;
-                              return InkWell(
-                                borderRadius: BorderRadius.circular(180),
-                                onTap: onTogglePlayback,
-                                child: _WaveStage(
-                                  controller: waveController,
-                                  active: playing,
-                                  golden: item.isGoldenVoice,
-                                ),
-                              );
-                            },
-                          ),
-                          const Spacer(),
-                          Row(
-                            children: [
-                              _InlineSignalIcon(
-                                icon: Icons.close,
-                                enabled: !isLocked,
-                                onTap: onDislike,
-                              ),
-                              Expanded(
-                                child: Text(
-                                  isLocked ? 'LISTENING' : 'SWIPE',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 2.2,
-                                    color: theme.colorScheme.onSurfaceVariant,
+                                      Text(
+                                        '@${item.username}',
+                                        style: TextStyle(
+                                          color: theme
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                              _InlineSignalIcon(
-                                icon: Icons.favorite_border,
-                                enabled: !isLocked,
-                                onTap: onLike,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          _ProgressBar(player: player),
-                        ],
+                                if (item.isGoldenVoice) const _GoldenChip(),
+                                if (!item.isGoldenVoice)
+                                  _DurationPill(duration: item.duration),
+                              ],
+                            ),
+                            const Spacer(),
+                            StreamBuilder<PlayerState>(
+                              stream: player.playerStateStream,
+                              builder: (context, snapshot) {
+                                final playing =
+                                    snapshot.data?.playing ?? player.playing;
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(180),
+                                  onTap: onTogglePlayback,
+                                  child: RepaintBoundary(
+                                    child: _WaveStage(
+                                      controller: waveController,
+                                      active: playing,
+                                      golden: item.isGoldenVoice,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const Spacer(),
+                            Row(
+                              children: [
+                                _InlineSignalIcon(
+                                  icon: Icons.close,
+                                  enabled: !isLocked,
+                                  onTap: onDislike,
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    isLocked ? 'LISTENING' : 'SWIPE',
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.labelLarge?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 2.2,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                _InlineSignalIcon(
+                                  icon: Icons.favorite_border,
+                                  enabled: !isLocked,
+                                  onTap: onLike,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            _ProgressBar(player: player),
+                          ],
+                        ),
                       ),
                     ),
                     if (isLocked)
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: AnimatedBuilder(
-                            animation: unlockController,
-                            builder: (context, _) {
-                              return CustomPaint(
-                                painter: _CometBorderPainter(
-                                  progress: unlockController.value,
-                                  radius: AppTheme.cardRadius,
-                                ),
-                              );
-                            },
+                          child: RepaintBoundary(
+                            child: AnimatedBuilder(
+                              animation: unlockController,
+                              builder: (context, _) {
+                                return CustomPaint(
+                                  painter: _CometBorderPainter(
+                                    progress: unlockController.value,
+                                    radius: AppTheme.cardRadius,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),

@@ -14,6 +14,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+  int _profileRefreshTick = 0;
 
   void _openDm() {
     Navigator.of(
@@ -21,17 +22,20 @@ class _AppShellState extends State<AppShell> {
     ).push(MaterialPageRoute<void>(builder: (_) => const DmInboxScreen()));
   }
 
-  void _openCast() {
-    Navigator.of(
+  Future<void> _openCast() async {
+    final didCast = await Navigator.of(
       context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const CastScreen()));
+    ).push<bool>(MaterialPageRoute<bool>(builder: (_) => const CastScreen()));
+    if (didCast == true && mounted) {
+      setState(() => _profileRefreshTick++);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
       FeedScreen(onOpenDm: _openDm, onOpenCast: _openCast),
-      const ProfileScreen(),
+      ProfileScreen(refreshTick: _profileRefreshTick),
     ];
 
     return Scaffold(
