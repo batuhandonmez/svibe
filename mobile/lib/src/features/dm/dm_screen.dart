@@ -317,6 +317,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   bool _isSendingAudio = false;
   bool _isSendingText = false;
   bool _isRecording = false;
+  bool _isStoppingAudioRecording = false;
   String? _playingMessageId;
   int _recordSeconds = 0;
   Timer? _recordTimer;
@@ -379,7 +380,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   }
 
   Future<void> _toggleVoiceDm() async {
-    if (_isSendingAudio) {
+    if (_isSendingAudio || _isStoppingAudioRecording) {
       return;
     }
     if (kIsWeb) {
@@ -416,57 +417,83 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
   }
 
   Future<void> _startRecording() async {
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
-      _show('Microphone permission is needed for voice DM.');
+    if (_isRecording || _isStoppingAudioRecording || _isSendingAudio) {
       return;
     }
-    final path = await _recordPath();
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      ),
-      path: path,
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _isRecording = true;
-      _recordSeconds = 0;
-    });
-    _recordTimer?.cancel();
-    _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        _show('Microphone permission is needed for voice DM.');
+        return;
+      }
+      final path = await _recordPath();
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: path,
+      );
       if (!mounted) {
         return;
       }
-      final next = _recordSeconds + 1;
-      setState(() => _recordSeconds = next);
-      if (next >= 30) {
-        await _stopAndSendRecording();
+      setState(() {
+        _isRecording = true;
+        _recordSeconds = 0;
+      });
+      _recordTimer?.cancel();
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+        if (!mounted) {
+          return;
+        }
+        final next = _recordSeconds + 1;
+        setState(() => _recordSeconds = next);
+        if (next >= 30) {
+          await _stopAndSendRecording();
+        }
+      });
+    } on Object {
+      if (mounted) {
+        _show(
+          'Voice DM recording could not start. Check microphone permission.',
+        );
       }
-    });
+    }
   }
 
   Future<void> _stopAndSendRecording() async {
+    if (!_isRecording || _isStoppingAudioRecording) {
+      return;
+    }
     _recordTimer?.cancel();
-    final path = await _recorder.stop();
-    if (!mounted) {
-      return;
+    setState(() => _isStoppingAudioRecording = true);
+    try {
+      final path = await _recorder.stop();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isRecording = false);
+      if (path == null) {
+        _show('Recording could not be saved.');
+        return;
+      }
+      final bytes = await File(path).readAsBytes();
+      await _sendAudioBytes(
+        bytes,
+        filename: path.split(RegExp(r'[\\/]')).last,
+        duration: _recordSeconds.clamp(1, 30),
+      );
+    } on Object {
+      if (mounted) {
+        setState(() => _isRecording = false);
+        _show('Voice DM recording could not be saved.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isStoppingAudioRecording = false);
+      }
     }
-    setState(() => _isRecording = false);
-    if (path == null) {
-      _show('Recording could not be saved.');
-      return;
-    }
-    final bytes = await File(path).readAsBytes();
-    await _sendAudioBytes(
-      bytes,
-      filename: path.split(RegExp(r'[\\/]')).last,
-      duration: _recordSeconds.clamp(1, 30),
-    );
   }
 
   Future<void> _sendAudioBytes(
@@ -594,7 +621,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
               isRecording: _isRecording,
               recordSeconds: _recordSeconds,
               isSendingText: _isSendingText,
-              isSendingAudio: _isSendingAudio,
+              isSendingAudio: _isSendingAudio || _isStoppingAudioRecording,
               onVoiceTap: _toggleVoiceDm,
               onSend: _send,
             ),
