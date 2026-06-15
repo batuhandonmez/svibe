@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     AUTH_RATE_LIMIT_PER_WINDOW: int = 30
     WRITE_RATE_LIMIT_PER_WINDOW: int = 120
+    SEED_DEMO_DATA: bool = True
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

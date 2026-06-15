@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.database import get_db
 from core.security import get_current_user
 from core.time import utc_now
@@ -160,8 +161,20 @@ def discover_next_vibe(
     if not rows:
         return DiscoverResponse(item=None)
 
-    weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
-    vibe, owner = random.choices(rows, weights=weights, k=1)[0]
+    demo_should_show_golden_first = (
+        settings.ENVIRONMENT.lower() in {"development", "dev"}
+        and current_user.username == "demo_user"
+    )
+    if demo_should_show_golden_first:
+        golden_rows = [(vibe, owner) for vibe, owner in rows if vibe.is_golden_voice]
+        if golden_rows:
+            vibe, owner = max(golden_rows, key=lambda row: row[0].swipe_right_count)
+        else:
+            weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
+            vibe, owner = random.choices(rows, weights=weights, k=1)[0]
+    else:
+        weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
+        vibe, owner = random.choices(rows, weights=weights, k=1)[0]
     listen = db.scalar(
         select(VibeListen).where(
             VibeListen.user_id == current_user.id,

@@ -92,6 +92,10 @@ phone-friendly URL plus `demo_user / demo12345`.
 Use the printed `Web:` URL on an iPhone connected to the same Wi-Fi. On this
 computer, `http://127.0.0.1:8096` should also work.
 
+In development, the API also prepares the `demo_user / demo12345` account on
+startup when `SEED_DEMO_DATA=true`. The launcher is still the preferred demo
+path because it also sets the LAN media URL used by iPhone Safari.
+
 When AWS S3 variables are omitted in development, new audio/profile uploads are
 stored under `backend/local_media/uploads` and served through `/media/uploads`.
 The launcher sets `LOCAL_MEDIA_BASE_URL` so those local files work from an
