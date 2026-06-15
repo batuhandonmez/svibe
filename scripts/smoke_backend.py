@@ -141,6 +141,45 @@ def main() -> int:
         checks.append("demo/audio_url")
     checks.append("vibes/discover/next")
 
+    if args.mode == "demo":
+        item = discover["item"]
+        if not item.get("is_golden_voice"):
+            raise RuntimeError(f"Demo first discover item is not Golden Voice: {item}")
+
+        vibe_id = item["id"]
+        listen = _request(
+            args.base_url,
+            "POST",
+            f"/vibes/{vibe_id}/listen/start",
+            token=token,
+        )
+        if listen.get("vibe_id") != vibe_id:
+            raise RuntimeError(f"Unexpected listen response: {listen}")
+        checks.append("vibes/listen/start")
+
+        time.sleep(3.2)
+        pending = _request(
+            args.base_url,
+            "POST",
+            f"/vibes/{vibe_id}/swipe",
+            token=token,
+            payload={"direction": "like"},
+        )
+        if not pending.get("golden_voice_unlock_pending"):
+            raise RuntimeError(f"Golden Voice did not request unlock: {pending}")
+        checks.append("golden_voice/pending")
+
+        unlocked = _request(
+            args.base_url,
+            "POST",
+            f"/vibes/{vibe_id}/swipe",
+            token=token,
+            payload={"direction": "like", "golden_unlock_confirmed": True},
+        )
+        if not unlocked.get("golden_voice_unlocked"):
+            raise RuntimeError(f"Golden Voice did not unlock: {unlocked}")
+        checks.append("golden_voice/unlock")
+
     my_vibes = _request(args.base_url, "GET", "/vibes/mine", token=token)
     if "items" not in my_vibes:
         raise RuntimeError(f"Unexpected my vibes response: {my_vibes}")
@@ -158,6 +197,38 @@ def main() -> int:
             "Demo DM inbox is empty. Run scripts/seed_local_demo.py first."
         )
     checks.append("dm/threads")
+
+    if args.mode == "demo":
+        thread_id = threads["items"][0]["id"]
+        before = _request(
+            args.base_url,
+            "GET",
+            f"/dm/threads/{thread_id}/messages",
+            token=token,
+        )
+        if "items" not in before:
+            raise RuntimeError(f"Unexpected DM messages response: {before}")
+
+        text = f"Smoke hello {time.time_ns()}"
+        sent = _request(
+            args.base_url,
+            "POST",
+            f"/dm/threads/{thread_id}/messages",
+            token=token,
+            payload={"text": text},
+        )
+        if sent.get("text") != text:
+            raise RuntimeError(f"Unexpected sent DM response: {sent}")
+
+        after = _request(
+            args.base_url,
+            "GET",
+            f"/dm/threads/{thread_id}/messages",
+            token=token,
+        )
+        if not any(message.get("text") == text for message in after.get("items", [])):
+            raise RuntimeError(f"Sent DM was not listed: {after}")
+        checks.append("dm/send_text")
 
     print("Smoke OK:", ", ".join(checks))
     return 0

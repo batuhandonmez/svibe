@@ -7,13 +7,18 @@ import routers.dm as dm_router
 import routers.users as users_router
 import routers.vibes as vibes_router
 from fastapi.testclient import TestClient
-from sqlalchemy import text, update
+from sqlalchemy import select, text, update
 
+from core.config import settings
 from core.database import Base, engine
+from core.database import SessionLocal
 from core.migrations import apply_lightweight_migrations
 from main import app
 from models.user import User
+from models.vibe import Vibe
 from models.vibe_listen import VibeListen
+from models.vibe_swipe import VibeSwipe
+from services.demo_seed import seed_demo_data
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +76,38 @@ def test_auth_register_login_and_me():
         me = client.get("/auth/me", headers=_headers(payload))
         assert me.status_code == 200
         assert me.json()["username"] == payload["user"]["username"]
+
+
+def test_demo_seed_rewrites_stale_demo_audio_urls_and_duplicates(monkeypatch):
+    monkeypatch.setattr(settings, "LOCAL_MEDIA_BASE_URL", "http://old.local:8000")
+    with SessionLocal() as db:
+        seed_demo_data(db)
+        demo_user = db.scalar(select(User).where(User.username == "demo_user"))
+        nova = db.scalar(select(User).where(User.username == "nova_signal"))
+        stale_vibe = Vibe(
+            user_id=nova.id,
+            audio_url="http://192.168.1.102:8000/media/demo/nova-golden-voice.wav",
+            duration=10,
+            is_golden_voice=True,
+        )
+        db.add(stale_vibe)
+        db.flush()
+        db.add(VibeListen(user_id=demo_user.id, vibe_id=stale_vibe.id))
+        db.add(VibeSwipe(user_id=demo_user.id, vibe_id=stale_vibe.id, direction="like"))
+        db.commit()
+
+    monkeypatch.setattr(settings, "LOCAL_MEDIA_BASE_URL", "http://127.0.0.1:8000")
+    with SessionLocal() as db:
+        seed_demo_data(db)
+
+    with SessionLocal() as db:
+        vibes = db.scalars(
+            select(Vibe).where(Vibe.audio_url.like("%/nova-golden-voice.wav"))
+        ).all()
+        assert len(vibes) == 1
+        assert vibes[0].audio_url == (
+            "http://127.0.0.1:8000/media/demo/nova-golden-voice.wav"
+        )
 
 
 def test_vibe_upload_requires_token():

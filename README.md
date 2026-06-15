@@ -91,6 +91,9 @@ local demo voices and DMs, starts Flutter web on `0.0.0.0:8096`, and prints the
 phone-friendly URL plus `demo_user / demo12345`.
 Use the printed `Web:` URL on an iPhone connected to the same Wi-Fi. On this
 computer, `http://127.0.0.1:8096` should also work.
+When no `API_BASE_URL` dart define is supplied, Flutter web derives the API host
+from the page URL and uses port `8000`, so `http://YOUR_COMPUTER_LAN_IP:8096`
+talks to `http://YOUR_COMPUTER_LAN_IP:8000`.
 
 In development, the API also prepares the `demo_user / demo12345` account on
 startup when `SEED_DEMO_DATA=true`. The launcher is still the preferred demo

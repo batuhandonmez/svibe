@@ -142,6 +142,35 @@ def _thread_pair(user_a: User, user_b: User) -> tuple:
     return ordered[0], ordered[1]
 
 
+def _upsert_demo_vibe(db: Session, owner: User, payload: dict[str, object], expires_at) -> Vibe:
+    audio_url = _demo_audio_url(str(payload["file"]))
+    matching_vibes = db.scalars(
+        select(Vibe)
+        .where(Vibe.audio_url.like(f"%/{payload['file']}"))
+        .order_by(Vibe.created_at.desc())
+    ).all()
+
+    vibe = matching_vibes[0] if matching_vibes else None
+    duplicate_ids = [duplicate.id for duplicate in matching_vibes[1:]]
+    if duplicate_ids:
+        db.execute(delete(VibeSwipe).where(VibeSwipe.vibe_id.in_(duplicate_ids)))
+        db.execute(delete(VibeListen).where(VibeListen.vibe_id.in_(duplicate_ids)))
+        for duplicate in matching_vibes[1:]:
+            db.delete(duplicate)
+
+    if vibe is None:
+        vibe = Vibe(user_id=owner.id, audio_url=audio_url, duration=int(payload["duration"]))
+        db.add(vibe)
+
+    vibe.user_id = owner.id
+    vibe.audio_url = audio_url
+    vibe.duration = int(payload["duration"])
+    vibe.is_golden_voice = bool(payload["is_golden_voice"])
+    vibe.swipe_right_count = int(payload["swipe_right_count"])
+    vibe.expires_at = expires_at
+    return vibe
+
+
 def seed_demo_data(db: Session) -> None:
     """Create stable local demo data for presentations and manual MVP testing."""
     users = {payload["username"]: _get_or_create_user(db, payload) for payload in DEMO_USERS}
@@ -155,16 +184,7 @@ def seed_demo_data(db: Session) -> None:
     expires_at = utc_now() + timedelta(days=7)
     for payload in [*DEMO_VIBES, *DEMO_OWN_VIBES]:
         owner = users[payload["username"]]
-        audio_url = _demo_audio_url(payload["file"])
-        vibe = db.scalar(select(Vibe).where(Vibe.audio_url == audio_url))
-        if vibe is None:
-            vibe = Vibe(user_id=owner.id, audio_url=audio_url, duration=payload["duration"])
-            db.add(vibe)
-        vibe.user_id = owner.id
-        vibe.duration = payload["duration"]
-        vibe.is_golden_voice = payload["is_golden_voice"]
-        vibe.swipe_right_count = payload["swipe_right_count"]
-        vibe.expires_at = expires_at
+        _upsert_demo_vibe(db, owner, payload, expires_at)
 
     peer = users["elara_v"]
     low_id, high_id = _thread_pair(demo_user, peer)

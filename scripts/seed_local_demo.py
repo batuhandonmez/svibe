@@ -149,8 +149,12 @@ def upsert_demo_vibe(db, user, audio_url, duration, likes, golden):
     if vibe is None:
         vibe = Vibe(user_id=user.id, audio_url=audio_url)
         db.add(vibe)
-    for duplicate in matching_vibes[1:]:
-        db.delete(duplicate)
+    duplicate_ids = [duplicate.id for duplicate in matching_vibes[1:]]
+    if duplicate_ids:
+        db.execute(delete(VibeListen).where(VibeListen.vibe_id.in_(duplicate_ids)))
+        db.execute(delete(VibeSwipe).where(VibeSwipe.vibe_id.in_(duplicate_ids)))
+        for duplicate in matching_vibes[1:]:
+            db.delete(duplicate)
     vibe.user_id = user.id
     vibe.audio_url = audio_url
     vibe.duration = duration

@@ -17,6 +17,12 @@ String defaultApiBaseUrl() {
   if (_apiBaseUrl.isNotEmpty) {
     return _apiBaseUrl;
   }
+  if (kIsWeb) {
+    final currentHost = Uri.base.host;
+    if (currentHost.isNotEmpty) {
+      return '${Uri.base.scheme}://$currentHost:8000';
+    }
+  }
   if (!kIsWeb && Platform.isAndroid) {
     return 'http://10.0.2.2:8000';
   }
@@ -74,10 +80,16 @@ class SvibeApiClient {
   Future<AuthSession> register({
     required String username,
     required String password,
+    String? displayName,
   }) async {
     final response = await _post(
       '/auth/register',
-      data: {'username': username, 'password': password},
+      data: {
+        'username': username,
+        'password': password,
+        if (displayName != null && displayName.trim().isNotEmpty)
+          'display_name': displayName.trim(),
+      },
     );
     final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
     await saveToken(session.accessToken);

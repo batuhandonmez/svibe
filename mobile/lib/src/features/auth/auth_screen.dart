@@ -13,12 +13,15 @@ class AuthScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
+  final _displayName = TextEditingController();
   final _username = TextEditingController();
   final _password = TextEditingController();
   bool _isRegister = false;
+  String? _localError;
 
   @override
   void dispose() {
+    _displayName.dispose();
     _username.dispose();
     _password.dispose();
     super.dispose();
@@ -98,7 +101,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               selected: !_isRegister,
                               onTap: auth.isLoading
                                   ? null
-                                  : () => setState(() => _isRegister = false),
+                                  : () => setState(() {
+                                      _isRegister = false;
+                                      _localError = null;
+                                    }),
                             ),
                           ),
                           Expanded(
@@ -107,7 +113,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               selected: _isRegister,
                               onTap: auth.isLoading
                                   ? null
-                                  : () => setState(() => _isRegister = true),
+                                  : () => setState(() {
+                                      _isRegister = true;
+                                      _localError = null;
+                                    }),
                             ),
                           ),
                         ],
@@ -136,6 +145,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                       child: Column(
                         children: [
+                          if (_isRegister) ...[
+                            TextField(
+                              controller: _displayName,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [AutofillHints.name],
+                              decoration: const InputDecoration(
+                                labelText: 'Display name',
+                                prefixIcon: Icon(Icons.badge_outlined),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           TextField(
                             controller: _username,
                             textInputAction: TextInputAction.next,
@@ -155,12 +176,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               prefixIcon: Icon(Icons.lock_outline),
                             ),
                           ),
-                          if (auth.error != null) ...[
+                          if (_localError != null || auth.error != null) ...[
                             const SizedBox(height: 14),
                             Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                auth.error!,
+                                _localError ?? auth.error!,
                                 style: TextStyle(
                                   color: theme.colorScheme.error,
                                   fontWeight: FontWeight.w800,
@@ -197,8 +218,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       'API: ${defaultApiBaseUrl()}',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant
-                            .withValues(alpha: .66),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: .66,
+                        ),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -216,11 +238,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final auth = ref.read(authControllerProvider);
     final username = _username.text.trim();
     final password = _password.text;
+    final displayName = _displayName.text.trim();
+    final validationError = _validate(username, password, displayName);
+    if (validationError != null) {
+      setState(() => _localError = validationError);
+      return;
+    }
+    setState(() => _localError = null);
     if (_isRegister) {
-      await auth.register(username: username, password: password);
+      await auth.register(
+        username: username,
+        password: password,
+        displayName: displayName,
+      );
     } else {
       await auth.login(username, password);
     }
+  }
+
+  String? _validate(String username, String password, String displayName) {
+    if (username.length < 3) {
+      return 'Username must be at least 3 characters.';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (_isRegister && displayName.isEmpty) {
+      return 'Display name is required.';
+    }
+    return null;
   }
 
   Future<void> _loginDemo() async {
@@ -229,6 +275,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
     setState(() {
       _isRegister = false;
+      _localError = null;
+      _displayName.clear();
       _username.text = 'demo_user';
       _password.text = 'demo12345';
     });

@@ -64,11 +64,16 @@ class AuthController extends ChangeNotifier {
     });
   }
 
-  Future<bool> register({required String username, required String password}) {
+  Future<bool> register({
+    required String username,
+    required String password,
+    String? displayName,
+  }) {
     return _withLoading(() async {
       final session = await _api.register(
         username: username,
         password: password,
+        displayName: displayName,
       );
       token = session.accessToken;
       user = session.user;
@@ -98,8 +103,10 @@ class AuthController extends ChangeNotifier {
     } on SvibeApiException catch (exception) {
       error = exception.message;
       return false;
-    } on Object {
-      error = 'Something went wrong. Try again.';
+    } on Object catch (exception) {
+      error = kDebugMode
+          ? 'Something went wrong: $exception'
+          : 'Something went wrong. Try again.';
       return false;
     } finally {
       isLoading = false;

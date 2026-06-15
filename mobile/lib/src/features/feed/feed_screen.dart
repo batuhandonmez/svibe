@@ -184,7 +184,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       return;
     }
     try {
-      await ref
+      final result = await ref
           .read(apiClientProvider)
           .swipeVibe(
             token,
@@ -193,6 +193,17 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             goldenUnlockConfirmed: true,
           );
       ref.invalidate(userStatusProvider);
+      if (mounted && result.goldenVoiceUnlocked) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Golden Voice unlocked. You can cast now.'),
+            action: SnackBarAction(
+              label: 'Cast now',
+              onPressed: widget.onOpenCast,
+            ),
+          ),
+        );
+      }
       await _loadNext();
     } on SvibeApiException catch (exception) {
       if (mounted) {

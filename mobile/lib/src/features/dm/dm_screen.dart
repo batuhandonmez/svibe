@@ -622,6 +622,7 @@ class _DmThreadViewState extends ConsumerState<_DmThreadView> {
               recordSeconds: _recordSeconds,
               isSendingText: _isSendingText,
               isSendingAudio: _isSendingAudio || _isStoppingAudioRecording,
+              onAttachAudio: _pickAudioMessage,
               onVoiceTap: _toggleVoiceDm,
               onSend: _send,
             ),
@@ -722,6 +723,7 @@ class _MessageComposer extends StatelessWidget {
     required this.recordSeconds,
     required this.isSendingText,
     required this.isSendingAudio,
+    required this.onAttachAudio,
     required this.onVoiceTap,
     required this.onSend,
   });
@@ -731,6 +733,7 @@ class _MessageComposer extends StatelessWidget {
   final int recordSeconds;
   final bool isSendingText;
   final bool isSendingAudio;
+  final VoidCallback onAttachAudio;
   final VoidCallback onVoiceTap;
   final VoidCallback onSend;
 
@@ -754,8 +757,8 @@ class _MessageComposer extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                tooltip: 'Attach',
-                onPressed: _busy ? null : () {},
+                tooltip: 'Attach audio file',
+                onPressed: _busy ? null : onAttachAudio,
                 icon: const Icon(Icons.add, color: Color(0xFFD5D0C8), size: 30),
               ),
               Expanded(
@@ -809,12 +812,19 @@ class _MessageComposer extends StatelessWidget {
                           padding: EdgeInsets.all(18),
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Icon(
-                          icon,
-                          color: hasText
-                              ? const Color(0xFF111111)
-                              : const Color(0xFFE8E4DE),
-                          size: 28,
+                      : Tooltip(
+                          message: hasText
+                              ? 'Send message'
+                              : isRecording
+                              ? 'Stop and send voice'
+                              : 'Record voice message',
+                          child: Icon(
+                            icon,
+                            color: hasText
+                                ? const Color(0xFF111111)
+                                : const Color(0xFFE8E4DE),
+                            size: 28,
+                          ),
                         ),
                 ),
               ),
