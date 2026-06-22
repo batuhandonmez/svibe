@@ -4,6 +4,7 @@ import argparse
 import io
 import math
 import os
+import shutil
 import sys
 import wave
 from datetime import timedelta
@@ -29,6 +30,8 @@ from models.vibe_swipe import VibeSwipe  # noqa: E402
 
 DEMO_PASSWORD = "demo12345"
 DEMO_USERS = [
+    ("demo_listener", "Demo Listener", "Presentation listener account.", False, "everyone"),
+    ("demo_creator", "Demo Creator", "Presentation creator account.", False, "everyone"),
     ("mira_wave", "Mira Wave", "Night walks, small city notes.", False, "everyone"),
     ("atlas_signal", "Atlas", "Short thoughts in clean audio.", False, "everyone"),
     ("nova_signal", "Nova Signal", "Rare Golden Voice energy.", False, "followers"),
@@ -64,6 +67,14 @@ def make_wav(freq: float, seconds: int) -> bytes:
     return out.getvalue()
 
 
+def prepare_audio(path: Path, freq: float, seconds: int) -> None:
+    source = ROOT / "scripts" / "demo_audio" / path.name
+    if source.exists():
+        shutil.copyfile(source, path)
+    else:
+        path.write_bytes(make_wav(freq, seconds))
+
+
 def upsert_demo_user(db, username, display_name, bio, is_private, message_privacy):
     user = db.scalar(select(User).where(User.username == username))
     if user is None:
@@ -73,9 +84,9 @@ def upsert_demo_user(db, username, display_name, bio, is_private, message_privac
     user.display_name = display_name
     user.bio = bio
     user.password_hash = hash_password(DEMO_PASSWORD)
-    user.is_muted = False
-    user.is_vip = True
-    user.daily_vibe_count = 30
+    user.is_muted = username == "demo_listener"
+    user.is_vip = username != "demo_listener"
+    user.daily_vibe_count = 0 if username == "demo_listener" else 30
     user.is_private = is_private
     user.message_privacy = message_privacy
     return user
@@ -130,9 +141,9 @@ def viewer_user(db, username: str | None) -> User:
         display_name=username.replace("_", " ").title(),
         bio="Local demo account.",
         password_hash=hash_password(DEMO_PASSWORD),
-        is_muted=False,
-        is_vip=True,
-        daily_vibe_count=30,
+        is_muted=username == "demo_listener",
+        is_vip=username != "demo_listener",
+        daily_vibe_count=0 if username == "demo_listener" else 30,
         is_private=False,
         message_privacy="everyone",
     )
@@ -167,7 +178,7 @@ def upsert_demo_vibe(db, user, audio_url, duration, likes, golden):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed local demo vibes and DMs.")
-    parser.add_argument("--username", help="Viewer username. Defaults to latest user.")
+    parser.add_argument("--username", default="demo_listener")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     args = parser.parse_args()
 
@@ -186,7 +197,7 @@ def main() -> None:
         demo_vibe_ids = []
         for username, duration, freq, likes, golden, filename in DEMO_VIBES:
             path = media_dir / filename
-            path.write_bytes(make_wav(freq, duration))
+            prepare_audio(path, freq, duration)
             audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
             vibe = upsert_demo_vibe(
                 db,
@@ -200,7 +211,7 @@ def main() -> None:
 
         for duration, freq, likes, golden, filename in DEMO_VIEWER_VIBES:
             path = media_dir / filename
-            path.write_bytes(make_wav(freq, duration))
+            prepare_audio(path, freq, duration)
             audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
             upsert_demo_vibe(db, viewer, audio_url, duration, likes, golden)
 

@@ -277,10 +277,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       _isRegister = false;
       _localError = null;
       _displayName.clear();
-      _username.text = 'demo_user';
+      _username.text = 'demo_listener';
       _password.text = 'demo12345';
     });
-    await ref.read(authControllerProvider).login('demo_user', 'demo12345');
+    await ref.read(authControllerProvider).login('demo_listener', 'demo12345');
   }
 }
 
@@ -402,7 +402,7 @@ class _DemoHint extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Demo: demo_user / demo12345',
+                  'Demo: demo_listener / demo12345',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),

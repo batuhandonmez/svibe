@@ -21,12 +21,20 @@ DEMO_PASSWORD = "demo12345"
 
 DEMO_USERS = [
     {
-        "username": "demo_user",
+        "username": "demo_listener",
         "display_name": "Demo Listener",
         "bio": "Presentation-ready account for exploring Svibe.",
         "is_muted": True,
         "daily_vibe_count": 0,
         "is_vip": False,
+    },
+    {
+        "username": "demo_creator",
+        "display_name": "Demo Creator",
+        "bio": "Presentation account for recording and casting new vibes.",
+        "is_muted": False,
+        "daily_vibe_count": 30,
+        "is_vip": True,
     },
     {
         "username": "nova_signal",
@@ -97,7 +105,7 @@ DEMO_VIBES = [
 
 DEMO_OWN_VIBES = [
     {
-        "username": "demo_user",
+        "username": "demo_listener",
         "file": "demo-user-archive.wav",
         "duration": 14,
         "is_golden_voice": False,
@@ -108,9 +116,9 @@ DEMO_OWN_VIBES = [
 
 DEMO_MESSAGES = [
     ("elara_v", "I found a quiet alley with a perfect echo today."),
-    ("demo_user", "That sounds exactly like the kind of signal Svibe needs."),
+    ("demo_listener", "That sounds exactly like the kind of signal Svibe needs."),
     ("elara_v", None),
-    ("demo_user", "Send it over. I want to hear the texture."),
+    ("demo_listener", "Send it over. I want to hear the texture."),
 ]
 
 
@@ -174,7 +182,7 @@ def _upsert_demo_vibe(db: Session, owner: User, payload: dict[str, object], expi
 def seed_demo_data(db: Session) -> None:
     """Create stable local demo data for presentations and manual MVP testing."""
     users = {payload["username"]: _get_or_create_user(db, payload) for payload in DEMO_USERS}
-    demo_user = users["demo_user"]
+    demo_user = users["demo_listener"]
 
     db.flush()
 

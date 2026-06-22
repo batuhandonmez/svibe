@@ -166,7 +166,8 @@ def discover_next_vibe(
 
     demo_should_show_golden_first = (
         settings.ENVIRONMENT.lower() in {"development", "dev"}
-        and current_user.username == "demo_user"
+        and current_user.username in {"demo_user", "demo_listener"}
+        and current_user.is_muted
     )
     if demo_should_show_golden_first:
         golden_rows = [(vibe, owner) for vibe, owner in rows if vibe.is_golden_voice]
@@ -176,8 +177,14 @@ def discover_next_vibe(
             weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
             vibe, owner = random.choices(rows, weights=weights, k=1)[0]
     else:
-        weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
-        vibe, owner = random.choices(rows, weights=weights, k=1)[0]
+        creator_rows = [
+            (vibe, owner) for vibe, owner in rows if owner.username == "demo_creator"
+        ]
+        if current_user.username == "demo_listener" and creator_rows:
+            vibe, owner = max(creator_rows, key=lambda row: row[0].created_at)
+        else:
+            weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
+            vibe, owner = random.choices(rows, weights=weights, k=1)[0]
     listen = db.scalar(
         select(VibeListen).where(
             VibeListen.user_id == current_user.id,

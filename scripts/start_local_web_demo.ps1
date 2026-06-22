@@ -1,5 +1,5 @@
 param(
-    [string]$Username = "demo_user",
+    [string]$Username = "demo_listener",
     [string]$LanIp = "",
     [int]$BackendPort = 8000,
     [int]$WebPort = 8096,

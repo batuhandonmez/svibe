@@ -82,7 +82,7 @@ def test_demo_seed_rewrites_stale_demo_audio_urls_and_duplicates(monkeypatch):
     monkeypatch.setattr(settings, "LOCAL_MEDIA_BASE_URL", "http://old.local:8000")
     with SessionLocal() as db:
         seed_demo_data(db)
-        demo_user = db.scalar(select(User).where(User.username == "demo_user"))
+        demo_user = db.scalar(select(User).where(User.username == "demo_listener"))
         nova = db.scalar(select(User).where(User.username == "nova_signal"))
         stale_vibe = Vibe(
             user_id=nova.id,
@@ -108,6 +108,43 @@ def test_demo_seed_rewrites_stale_demo_audio_urls_and_duplicates(monkeypatch):
         assert vibes[0].audio_url == (
             "http://127.0.0.1:8000/media/demo/nova-golden-voice.wav"
         )
+
+
+def test_demo_listener_sees_golden_then_latest_creator_vibe(monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(vibes_router, "create_presigned_audio_url", lambda value: value)
+    with SessionLocal() as db:
+        seed_demo_data(db)
+        listener = db.scalar(select(User).where(User.username == "demo_listener"))
+        creator = db.scalar(select(User).where(User.username == "demo_creator"))
+        assert listener.is_muted is True
+        assert creator.is_muted is False
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/auth/login",
+            json={"username": "demo_listener", "password": "demo12345"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        first = client.get("/vibes/discover/next", headers=headers)
+        assert first.json()["item"]["is_golden_voice"] is True
+
+        with SessionLocal() as db:
+            listener = db.scalar(select(User).where(User.username == "demo_listener"))
+            creator = db.scalar(select(User).where(User.username == "demo_creator"))
+            listener.is_muted = False
+            creator_vibe = Vibe(
+                user_id=creator.id,
+                audio_url="local://demo/creator-live.wav",
+                duration=8,
+                expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1),
+            )
+            db.add_all([listener, creator_vibe])
+            db.commit()
+            creator_vibe_id = str(creator_vibe.id)
+
+        next_vibe = client.get("/vibes/discover/next", headers=headers)
+        assert next_vibe.json()["item"]["id"] == creator_vibe_id
 
 
 def test_vibe_upload_requires_token():
