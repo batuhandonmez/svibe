@@ -115,9 +115,9 @@ DEMO_OWN_VIBES = [
 
 
 DEMO_MESSAGES = [
-    ("elara_v", "I found a quiet alley with a perfect echo today."),
+    ("demo_creator", "I just recorded a new vibe. Tell me if it reaches your feed."),
     ("demo_listener", "That sounds exactly like the kind of signal Svibe needs."),
-    ("elara_v", None),
+    ("demo_creator", None),
     ("demo_listener", "Send it over. I want to hear the texture."),
 ]
 
@@ -194,7 +194,7 @@ def seed_demo_data(db: Session) -> None:
         owner = users[payload["username"]]
         _upsert_demo_vibe(db, owner, payload, expires_at)
 
-    peer = users["elara_v"]
+    peer = users["demo_creator"]
     low_id, high_id = _thread_pair(demo_user, peer)
     thread = db.scalar(
         select(DmThread).where(

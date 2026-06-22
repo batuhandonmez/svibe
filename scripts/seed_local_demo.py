@@ -242,19 +242,10 @@ def main() -> None:
         add_thread(
             db,
             viewer,
-            users["mira_wave"],
+            users["demo_creator"],
             [
-                (users["mira_wave"], "Feed is no longer empty. Try swiping after 3 seconds."),
-                (viewer, "Nice, I can finally show the flow."),
-            ],
-        )
-        add_thread(
-            db,
-            viewer,
-            users["nova_signal"],
-            [
-                (users["nova_signal"], "A Golden Voice is waiting in discovery."),
-                (viewer, "I want the shake ritual to feel rare."),
+                (users["demo_creator"], "I just recorded a new vibe. Check your feed."),
+                (viewer, "Got it. I can hear it clearly."),
             ],
         )
         db.commit()
