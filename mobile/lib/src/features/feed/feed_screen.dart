@@ -169,6 +169,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         await _loadNext();
       }
     } on SvibeApiException catch (exception) {
+      if (_isAlreadySwipedError(exception)) {
+        await _loadNext();
+        return;
+      }
       if (mounted) {
         setState(() {
           _error = exception.message;
@@ -206,10 +210,18 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       }
       await _loadNext();
     } on SvibeApiException catch (exception) {
+      if (_isAlreadySwipedError(exception)) {
+        await _loadNext();
+        return;
+      }
       if (mounted) {
         setState(() => _error = exception.message);
       }
     }
+  }
+
+  bool _isAlreadySwipedError(SvibeApiException exception) {
+    return exception.message.toLowerCase().contains('already been swiped');
   }
 
   Future<void> _showGoldenVoiceRitual(VibeFeedItem item) {
@@ -377,6 +389,7 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    const golden = Color(0xFFD6B15D);
     final name = item.displayName?.isNotEmpty == true
         ? item.displayName!
         : item.username;
@@ -449,23 +462,34 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: theme.extension<SvibeColors>()!.elevated,
+                        color: item.isGoldenVoice
+                            ? Color.alphaBlend(
+                                golden.withValues(alpha: .10),
+                                theme.extension<SvibeColors>()!.elevated,
+                              )
+                            : theme.extension<SvibeColors>()!.elevated,
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(
-                            alpha: .72,
-                          ),
+                          color: item.isGoldenVoice
+                              ? golden.withValues(alpha: .78)
+                              : theme.colorScheme.outline.withValues(
+                                  alpha: .72,
+                                ),
+                          width: item.isGoldenVoice ? 1.5 : 1,
                         ),
                         borderRadius: BorderRadius.circular(
                           AppTheme.cardRadius,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: theme.brightness == Brightness.dark
-                                  ? 0.28
-                                  : 0.08,
-                            ),
-                            blurRadius: 22,
+                            color: item.isGoldenVoice
+                                ? golden.withValues(alpha: .20)
+                                : Colors.black.withValues(
+                                    alpha: theme.brightness == Brightness.dark
+                                        ? 0.28
+                                        : 0.08,
+                                  ),
+                            blurRadius: item.isGoldenVoice ? 34 : 22,
+                            spreadRadius: item.isGoldenVoice ? 1 : 0,
                             offset: const Offset(0, 14),
                           ),
                         ],
@@ -731,19 +755,26 @@ class _GoldenChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const golden = Color(0xFFD6B15D);
+    const goldenInk = Color(0xFF1C1608);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: .72),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: .72),
-        ),
+        color: golden,
+        border: Border.all(color: Colors.white.withValues(alpha: .28)),
         borderRadius: BorderRadius.circular(99),
+        boxShadow: [
+          BoxShadow(
+            color: golden.withValues(alpha: .22),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: Text(
-        'RARE',
+      child: const Text(
+        'GOLDEN',
         style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface,
+          color: goldenInk,
           fontSize: 11,
           fontWeight: FontWeight.w900,
         ),
@@ -774,7 +805,9 @@ class _WaveStage extends StatelessWidget {
             size: const Size(170, 112),
             painter: _WavePainter(
               tick: controller.value,
-              color: theme.colorScheme.onSurface,
+              color: golden
+                  ? const Color(0xFFD6B15D)
+                  : theme.colorScheme.onSurface,
               active: active,
             ),
           );
@@ -1115,6 +1148,8 @@ class _GoldenRitualCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const golden = Color(0xFFD6B15D);
+    const goldenDeep = Color(0xFF211A0B);
     return Container(
       height: 260,
       decoration: BoxDecoration(
@@ -1157,16 +1192,13 @@ class _GoldenRitualCard extends StatelessWidget {
             top: 28,
             child: Icon(
               Icons.graphic_eq,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: goldenDeep.withValues(alpha: .82),
             ),
           ),
           Positioned(
             left: 28,
             bottom: 28,
-            child: Icon(
-              Icons.graphic_eq,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            child: Icon(Icons.graphic_eq, color: golden.withValues(alpha: .72)),
           ),
         ],
       ),
