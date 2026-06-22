@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -22,6 +23,7 @@ class CastScreen extends ConsumerStatefulWidget {
 
 class _CastScreenState extends ConsumerState<CastScreen> {
   final _recorder = AudioRecorder();
+  final _previewPlayer = AudioPlayer();
   late final MotionTrigger _castMotion;
   bool _isUploading = false;
   bool _isRecording = false;
@@ -38,7 +40,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
       threshold: 16,
       onTrigger: () {
         if (!_isUploading && !_isRecording && _recordedBytes != null) {
-          _cast();
+          unawaited(_cast());
         }
       },
     )..start();
@@ -49,6 +51,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     _recordTimer?.cancel();
     _castMotion.stop();
     _recorder.dispose();
+    _previewPlayer.dispose();
     super.dispose();
   }
 
@@ -64,6 +67,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
       }
 
       final path = await _recordPath();
+      await _previewPlayer.stop();
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
@@ -89,7 +93,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
         final next = _recordSeconds + 1;
         setState(() => _recordSeconds = next);
         if (next >= 30) {
-          await _stopRecording(castAfterStop: true);
+          await _stopRecording();
         }
       });
     } on Object {
@@ -99,7 +103,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     }
   }
 
-  Future<void> _stopRecording({bool castAfterStop = true}) async {
+  Future<void> _stopRecording() async {
     if (!_isRecording || _isStoppingRecording) {
       return;
     }
@@ -125,10 +129,6 @@ class _CastScreenState extends ConsumerState<CastScreen> {
         _recordedPath = path;
         _recordedBytes = bytes;
       });
-
-      if (castAfterStop) {
-        await _cast();
-      }
     } on Object {
       if (mounted) {
         setState(() => _isRecording = false);
@@ -148,7 +148,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
       return;
     }
     if (_isRecording) {
-      await _stopRecording(castAfterStop: true);
+      await _stopRecording();
     } else {
       await _startRecording();
     }
@@ -182,7 +182,38 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     if (file == null || bytes == null || !mounted) {
       return;
     }
-    await _castBytes(bytes, filename: file.name, duration: 30);
+    setState(() {
+      _recordedBytes = bytes;
+      _recordedPath = file.path ?? file.name;
+      _recordSeconds = 30;
+    });
+  }
+
+  Future<void> _togglePreview() async {
+    final path = _recordedPath;
+    if (path == null || kIsWeb) {
+      _show('Audio preview is available in the Android app.');
+      return;
+    }
+    if (_previewPlayer.playing) {
+      await _previewPlayer.pause();
+      return;
+    }
+    await _previewPlayer.setFilePath(path);
+    await _previewPlayer.play();
+  }
+
+  Future<void> _recordAgain() async {
+    await _previewPlayer.stop();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _recordedBytes = null;
+      _recordedPath = null;
+      _recordSeconds = 0;
+    });
+    await _startRecording();
   }
 
   Future<void> _cast() async {
@@ -224,6 +255,7 @@ class _CastScreenState extends ConsumerState<CastScreen> {
             duration: duration,
           );
       ref.invalidate(userStatusProvider);
+      await _previewPlayer.stop();
       if (!mounted) {
         return;
       }
@@ -299,6 +331,8 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                               ? 'RECORDING'
                               : _isUploading
                               ? 'CASTING'
+                              : _recordedBytes != null
+                              ? 'READY'
                               : 'STANDBY',
                           style: const TextStyle(
                             color: Color(0xFFC9C6C0),
@@ -330,9 +364,11 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                         const Spacer(flex: 4),
                         Text(
                           canCast
-                              ? kIsWeb
+                              ? _recordedBytes != null
+                                    ? 'Shake your vibe to cast, or use the button'
+                                    : kIsWeb
                                     ? 'Tap to choose an audio file'
-                                    : 'Tap to record, tap again to cast'
+                                    : 'Tap to record, tap again to preview'
                               : 'Find a Golden Voice to speak again',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
@@ -342,20 +378,29 @@ class _CastScreenState extends ConsumerState<CastScreen> {
                           ),
                         ),
                         const SizedBox(height: 18),
-                        GestureDetector(
-                          onTap: canCast ? _toggleRecordButton : null,
-                          onLongPressStart: canCast
-                              ? (_) => _startRecording()
-                              : null,
-                          onLongPressEnd: canCast
-                              ? (_) => _stopRecording(castAfterStop: true)
-                              : null,
-                          child: _RecordButton(
-                            enabled: canCast,
-                            recording: _isRecording,
+                        if (_recordedBytes != null && !_isRecording)
+                          _PreviewActions(
+                            player: _previewPlayer,
                             uploading: _isUploading,
+                            onPreview: _togglePreview,
+                            onRecordAgain: _recordAgain,
+                            onCast: _cast,
+                          )
+                        else
+                          GestureDetector(
+                            onTap: canCast ? _toggleRecordButton : null,
+                            onLongPressStart: canCast
+                                ? (_) => _startRecording()
+                                : null,
+                            onLongPressEnd: canCast
+                                ? (_) => _stopRecording()
+                                : null,
+                            child: _RecordButton(
+                              enabled: canCast,
+                              recording: _isRecording,
+                              uploading: _isUploading,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -374,6 +419,66 @@ class _CastScreenState extends ConsumerState<CastScreen> {
     final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
     final remainder = (seconds % 60).toString().padLeft(2, '0');
     return '$minutes:$remainder';
+  }
+}
+
+class _PreviewActions extends StatelessWidget {
+  const _PreviewActions({
+    required this.player,
+    required this.uploading,
+    required this.onPreview,
+    required this.onRecordAgain,
+    required this.onCast,
+  });
+
+  final AudioPlayer player;
+  final bool uploading;
+  final VoidCallback onPreview;
+  final VoidCallback onRecordAgain;
+  final VoidCallback onCast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        StreamBuilder<PlayerState>(
+          stream: player.playerStateStream,
+          builder: (context, snapshot) {
+            final playing = snapshot.data?.playing ?? player.playing;
+            return Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: uploading ? null : onPreview,
+                    icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                    label: Text(playing ? 'Pause' : 'Preview'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: uploading ? null : onRecordAgain,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Re-record'),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: uploading ? null : onCast,
+          icon: uploading
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.send),
+          label: Text(uploading ? 'Casting...' : 'Cast this vibe'),
+        ),
+      ],
+    );
   }
 }
 
