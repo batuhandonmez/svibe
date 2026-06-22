@@ -137,8 +137,12 @@ class SvibeApiClient {
         .toList();
   }
 
-  Future<VibeFeedItem?> discoverNext(String token) async {
-    final response = await _get('/vibes/discover/next', token: token);
+  Future<VibeFeedItem?> discoverNext(String token, {String? excludeId}) async {
+    final response = await _get(
+      '/vibes/discover/next',
+      token: token,
+      queryParameters: {if (excludeId != null) 'exclude_id': excludeId},
+    );
     final data = response.data as Map<String, dynamic>;
     final item = data['item'];
     if (item is! Map<String, dynamic>) {
@@ -294,9 +298,17 @@ class SvibeApiClient {
     return DmMessage.fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<Response<dynamic>> _get(String path, {String? token}) {
+  Future<Response<dynamic>> _get(
+    String path, {
+    String? token,
+    Map<String, dynamic>? queryParameters,
+  }) {
     return _guarded(
-      () => _dio.get<dynamic>(path, options: Options(headers: _headers(token))),
+      () => _dio.get<dynamic>(
+        path,
+        queryParameters: queryParameters,
+        options: Options(headers: _headers(token)),
+      ),
     );
   }
 

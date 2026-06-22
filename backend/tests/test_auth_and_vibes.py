@@ -249,7 +249,19 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         assert feed_vibe["can_swipe_at"] is None
         assert feed_vibe["can_swipe_now"] is False
 
-        discover = client.get("/vibes/discover/next", headers=_headers(listener))
+        second_upload = client.post(
+            "/vibes",
+            headers=_headers(owner),
+            data={"duration": "4"},
+            files={"audio": ("second.m4a", b"second audio", "audio/mp4")},
+        )
+        assert second_upload.status_code == 201
+
+        discover = client.get(
+            "/vibes/discover/next",
+            headers=_headers(listener),
+            params={"exclude_id": second_upload.json()["id"]},
+        )
         assert discover.status_code == 200
         assert discover.json()["item"]["id"] == vibe["id"]
 
@@ -330,7 +342,7 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
 
         skipped_discover = client.get("/vibes/discover/next", headers=_headers(listener))
         assert skipped_discover.status_code == 200
-        assert skipped_discover.json()["item"] is None
+        assert skipped_discover.json()["item"]["id"] == second_upload.json()["id"]
 
         listener_delete = client.delete(
             f"/vibes/{vibe['id']}",

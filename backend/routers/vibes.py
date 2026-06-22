@@ -145,6 +145,7 @@ def upload_vibe(
 def discover_next_vibe(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    exclude_id: UUID | None = None,
 ):
     swiped_ids = select(VibeSwipe.vibe_id).where(VibeSwipe.user_id == current_user.id)
     statement = (
@@ -157,6 +158,8 @@ def discover_next_vibe(
         .order_by(Vibe.created_at.desc())
         .limit(100)
     )
+    if exclude_id is not None:
+        statement = statement.where(Vibe.id != exclude_id)
     rows = db.execute(statement).all()
     if not rows:
         return DiscoverResponse(item=None)

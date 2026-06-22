@@ -80,7 +80,14 @@ if (-not $LanIp) {
 
 $apiBaseUrl = "http://${LanIp}:${BackendPort}"
 $webUrl = "http://${LanIp}:${WebPort}"
+$demoDbPath = (Join-Path $backendDir "svibe_demo.sqlite3").Replace("\", "/")
+$env:DATABASE_URL = "sqlite:///$demoDbPath"
+$env:ENVIRONMENT = "development"
+$env:SEED_DEMO_DATA = "true"
 $env:LOCAL_MEDIA_BASE_URL = $apiBaseUrl
+$env:AWS_ACCESS_KEY_ID = ""
+$env:AWS_SECRET_ACCESS_KEY = ""
+$env:AWS_S3_BUCKET_NAME = ""
 
 if ($Restart) {
     foreach ($port in @($BackendPort, $WebPort)) {

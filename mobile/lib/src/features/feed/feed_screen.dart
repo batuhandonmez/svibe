@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/api/api_client.dart';
@@ -33,6 +35,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   late final AnimationController _unlockController;
   StreamSubscription<ProcessingState>? _stateSubscription;
   VibeFeedItem? _item;
+  VibeFeedItem? _nextItem;
   bool _isLoading = true;
   bool _isLocked = true;
   bool _isAdvancing = false;
@@ -53,7 +56,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     );
     _stateSubscription = _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed && !_isAdvancing) {
-        _loadNext();
+        _advanceToQueued();
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadNext());
@@ -87,24 +90,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     try {
       final api = ref.read(apiClientProvider);
       final next = await api.discoverNext(token);
+      final queued = next == null
+          ? null
+          : await api.discoverNext(token, excludeId: next.id);
       await _player.stop();
       if (!mounted) {
         return;
       }
       setState(() {
         _item = next;
+        _nextItem = queued;
         _isLoading = false;
       });
       if (next != null) {
-        await api.startListening(token, next.id);
-        await _player.setUrl(next.audioUrl);
-        _startUnlockCountdown();
-        unawaited(
-          _player.play().catchError((Object _) {
-            // Browsers may block autoplay until the user taps. The listening
-            // ritual still completes visually in the web demo.
-          }),
-        );
+        await _playItem(api, token, next);
       }
     } on SvibeApiException catch (exception) {
       if (mounted) {
@@ -119,6 +118,66 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           _error = 'This voice could not be played.';
           _isLoading = false;
         });
+      }
+    } finally {
+      _isAdvancing = false;
+    }
+  }
+
+  Future<void> _playItem(
+    SvibeApiClient api,
+    String token,
+    VibeFeedItem item,
+  ) async {
+    await api.startListening(token, item.id);
+    await _player.setUrl(item.audioUrl);
+    _startUnlockCountdown();
+    unawaited(
+      _player.play().catchError((Object _) {
+        // Browsers may block autoplay until the user taps.
+      }),
+    );
+  }
+
+  Future<void> _advanceToQueued() async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null || _isAdvancing) {
+      return;
+    }
+    final next = _nextItem;
+    if (next == null) {
+      await _loadNext();
+      return;
+    }
+
+    _isAdvancing = true;
+    _unlockTimer?.cancel();
+    _unlockController
+      ..stop()
+      ..reset();
+    setState(() {
+      _item = next;
+      _nextItem = null;
+      _isLocked = true;
+      _isSwipeSubmitting = false;
+      _error = null;
+    });
+
+    try {
+      final api = ref.read(apiClientProvider);
+      await _player.stop();
+      await _playItem(api, token, next);
+      final queued = await api.discoverNext(token, excludeId: next.id);
+      if (mounted && _item?.id == next.id) {
+        setState(() => _nextItem = queued);
+      }
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        setState(() => _error = exception.message);
+      }
+    } on PlayerException catch (_) {
+      if (mounted) {
+        setState(() => _error = 'This voice could not be played.');
       }
     } finally {
       _isAdvancing = false;
@@ -166,7 +225,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         setState(() => _isSwipeSubmitting = false);
         await _showGoldenVoiceRitual(item);
       } else {
-        await _loadNext();
+        await _advanceToQueued();
       }
     } on SvibeApiException catch (exception) {
       if (_isAlreadySwipedError(exception)) {
@@ -208,7 +267,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
         );
       }
-      await _loadNext();
+      await _advanceToQueued();
     } on SvibeApiException catch (exception) {
       if (_isAlreadySwipedError(exception)) {
         await _loadNext();
@@ -284,6 +343,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     : _DiscoveryCard(
                         key: ValueKey(_item!.id),
                         item: _item!,
+                        nextItem: _nextItem,
                         player: _player,
                         waveController: _waveController,
                         unlockController: _unlockController,
@@ -338,6 +398,7 @@ class _DmButton extends StatelessWidget {
 class _DiscoveryCard extends StatefulWidget {
   const _DiscoveryCard({
     required this.item,
+    required this.nextItem,
     required this.player,
     required this.waveController,
     required this.unlockController,
@@ -350,12 +411,13 @@ class _DiscoveryCard extends StatefulWidget {
   });
 
   final VibeFeedItem item;
+  final VibeFeedItem? nextItem;
   final AudioPlayer player;
   final Animation<double> waveController;
   final Animation<double> unlockController;
   final bool isLocked;
-  final VoidCallback onLike;
-  final VoidCallback onDislike;
+  final Future<void> Function() onLike;
+  final Future<void> Function() onDislike;
   final VoidCallback onOpenProfile;
   final VoidCallback onTogglePlayback;
 
@@ -363,27 +425,71 @@ class _DiscoveryCard extends StatefulWidget {
   State<_DiscoveryCard> createState() => _DiscoveryCardState();
 }
 
-class _DiscoveryCardState extends State<_DiscoveryCard> {
+class _DiscoveryCardState extends State<_DiscoveryCard>
+    with SingleTickerProviderStateMixin {
   final ValueNotifier<Offset> _drag = ValueNotifier<Offset>(Offset.zero);
+  late final AnimationController _dragController;
+  Offset _animationStart = Offset.zero;
+  Offset _animationEnd = Offset.zero;
+  bool _finishingSwipe = false;
 
   VibeFeedItem get item => widget.item;
+  VibeFeedItem? get nextItem => widget.nextItem;
   AudioPlayer get player => widget.player;
   Animation<double> get waveController => widget.waveController;
   Animation<double> get unlockController => widget.unlockController;
   bool get isLocked => widget.isLocked;
-  VoidCallback get onLike => widget.onLike;
-  VoidCallback get onDislike => widget.onDislike;
+  Future<void> Function() get onLike => widget.onLike;
+  Future<void> Function() get onDislike => widget.onDislike;
   VoidCallback get onOpenProfile => widget.onOpenProfile;
   VoidCallback get onTogglePlayback => widget.onTogglePlayback;
 
   @override
+  void initState() {
+    super.initState();
+    _dragController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 220),
+        )..addListener(() {
+          _drag.value = Offset.lerp(
+            _animationStart,
+            _animationEnd,
+            Curves.easeOutCubic.transform(_dragController.value),
+          )!;
+        });
+  }
+
+  @override
   void dispose() {
+    _dragController.dispose();
     _drag.dispose();
     super.dispose();
   }
 
-  void _resetDrag() {
-    _drag.value = Offset.zero;
+  Future<void> _animateDrag(Offset target) async {
+    _animationStart = _drag.value;
+    _animationEnd = target;
+    await _dragController.forward(from: 0);
+  }
+
+  Future<void> _resetDrag() => _animateDrag(Offset.zero);
+
+  Future<void> _finishSwipe(
+    double direction,
+    Future<void> Function() action,
+  ) async {
+    if (_finishingSwipe) {
+      return;
+    }
+    _finishingSwipe = true;
+    await HapticFeedback.mediumImpact();
+    await _animateDrag(Offset(direction * 520, _drag.value.dy));
+    await action();
+    if (mounted) {
+      _finishingSwipe = false;
+      await _resetDrag();
+    }
   }
 
   @override
@@ -398,27 +504,31 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
       onPanUpdate: isLocked
           ? null
           : (details) {
+              _dragController.stop();
               final drag = _drag.value;
               _drag.value = Offset(
                 (drag.dx + details.delta.dx).clamp(-130.0, 130.0),
                 (drag.dy + details.delta.dy).clamp(-70.0, 70.0),
               );
             },
-      onPanCancel: _resetDrag,
+      onPanCancel: () => unawaited(_resetDrag()),
       onPanEnd: (details) {
         final velocity = details.velocity.pixelsPerSecond;
         final drag = _drag.value;
         if (drag.dx > 88 || velocity.dx > 360) {
-          _resetDrag();
-          onLike();
+          if (item.isGoldenVoice) {
+            unawaited(_resetDrag());
+            unawaited(onLike());
+          } else {
+            unawaited(_finishSwipe(1, onLike));
+          }
         } else if (drag.dx < -88 || velocity.dx < -360) {
-          _resetDrag();
-          onDislike();
+          unawaited(_finishSwipe(-1, onDislike));
         } else if (!isLocked && (drag.dy < -52 || velocity.dy < -300)) {
-          _resetDrag();
+          unawaited(_resetDrag());
           onOpenProfile();
         } else {
-          _resetDrag();
+          unawaited(_resetDrag());
         }
       },
       child: LayoutBuilder(
@@ -432,28 +542,52 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
               child: ValueListenableBuilder<Offset>(
                 valueListenable: _drag,
                 builder: (context, drag, child) {
+                  final reveal = (drag.dx.abs() / 130).clamp(0.0, 1.0);
                   final stamp = drag.dx > 32
                       ? _SwipeStampKind.like
                       : drag.dx < -32
                       ? _SwipeStampKind.pass
                       : null;
-                  return Transform.translate(
-                    offset: Offset(drag.dx, 0),
-                    child: Stack(
-                      children: [
-                        child!,
-                        if (stamp != null)
-                          Positioned(
-                            top: 92,
-                            left: stamp == _SwipeStampKind.pass ? 24 : null,
-                            right: stamp == _SwipeStampKind.like ? 24 : null,
-                            child: _SwipeStamp(
-                              kind: stamp,
-                              opacity: (drag.dx.abs() / 120).clamp(0.0, 1.0),
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (nextItem != null)
+                        Transform.scale(
+                          scale: .94 + (.06 * reveal),
+                          child: ImageFiltered(
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: 6 * (1 - reveal),
+                              sigmaY: 6 * (1 - reveal),
                             ),
+                            child: _QueuedVibeCard(item: nextItem!),
                           ),
-                      ],
-                    ),
+                        ),
+                      Transform.translate(
+                        offset: Offset(drag.dx, drag.dy * .18),
+                        child: Transform.rotate(
+                          angle: drag.dx / 1100,
+                          child: Stack(
+                            children: [
+                              child!,
+                              if (stamp != null)
+                                Positioned(
+                                  top: 92,
+                                  left: stamp == _SwipeStampKind.pass
+                                      ? 24
+                                      : null,
+                                  right: stamp == _SwipeStampKind.like
+                                      ? 24
+                                      : null,
+                                  child: _SwipeStamp(
+                                    kind: stamp,
+                                    opacity: reveal,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 },
                 child: Stack(
@@ -608,6 +742,62 @@ class _DiscoveryCardState extends State<_DiscoveryCard> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _QueuedVibeCard extends StatelessWidget {
+  const _QueuedVibeCard({required this.item});
+
+  final VibeFeedItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = item.displayName?.isNotEmpty == true
+        ? item.displayName!
+        : item.username;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.extension<SvibeColors>()!.elevated,
+        border: Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              ProfileAvatar(
+                username: item.username,
+                imageUrl: item.profilePictureUrl,
+                radius: 26,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Icon(
+            Icons.graphic_eq,
+            size: 92,
+            color: item.isGoldenVoice
+                ? const Color(0xFFD6B15D)
+                : theme.colorScheme.onSurface,
+          ),
+          const Spacer(),
+        ],
       ),
     );
   }
