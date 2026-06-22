@@ -75,6 +75,14 @@ def prepare_audio(path: Path, freq: float, seconds: int) -> None:
         path.write_bytes(make_wav(freq, seconds))
 
 
+def wav_duration(path: Path, fallback: int) -> int:
+    try:
+        with wave.open(str(path), "rb") as wav:
+            return min(30, max(1, math.ceil(wav.getnframes() / wav.getframerate())))
+    except (wave.Error, OSError, ZeroDivisionError):
+        return fallback
+
+
 def upsert_demo_user(db, username, display_name, bio, is_private, message_privacy):
     user = db.scalar(select(User).where(User.username == username))
     if user is None:
@@ -198,6 +206,7 @@ def main() -> None:
         for username, duration, freq, likes, golden, filename in DEMO_VIBES:
             path = media_dir / filename
             prepare_audio(path, freq, duration)
+            duration = wav_duration(path, duration)
             audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
             vibe = upsert_demo_vibe(
                 db,
@@ -212,6 +221,7 @@ def main() -> None:
         for duration, freq, likes, golden, filename in DEMO_VIEWER_VIBES:
             path = media_dir / filename
             prepare_audio(path, freq, duration)
+            duration = wav_duration(path, duration)
             audio_url = f"{args.base_url.rstrip('/')}/media/demo/{filename}"
             upsert_demo_vibe(db, viewer, audio_url, duration, likes, golden)
 

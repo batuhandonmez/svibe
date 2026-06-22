@@ -31,4 +31,5 @@ Thumbs.db
 *.log
 *.sqlite3
 backend/local_media/
+scripts/demo_audio/*.wav
 outputs/
