@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/svibe_models.dart';
@@ -23,9 +25,29 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _archivePlayer = AudioPlayer();
+  StreamSubscription<ProcessingState>? _archivePlayerSub;
   Uint8List? _photoBytes;
   bool _isUploadingPhoto = false;
   Future<List<VibeFeedItem>>? _vibesFuture;
+  String? _playingVibeId;
+
+  @override
+  void initState() {
+    super.initState();
+    _archivePlayerSub = _archivePlayer.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed && mounted) {
+        setState(() => _playingVibeId = null);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _archivePlayerSub?.cancel();
+    _archivePlayer.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -140,7 +162,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     },
                   );
                 }
-                return _RecentArchiveList(vibes: vibes);
+                return _RecentArchiveList(
+                  vibes: vibes,
+                  playingVibeId: _playingVibeId,
+                  onPlay: _playArchive,
+                  onDelete: _deleteArchive,
+                );
               },
             ),
           ],
@@ -254,6 +281,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } finally {
       if (mounted) {
         setState(() => _isUploadingPhoto = false);
+      }
+    }
+  }
+
+  Future<void> _playArchive(VibeFeedItem vibe) async {
+    try {
+      if (_playingVibeId == vibe.id && _archivePlayer.playing) {
+        await _archivePlayer.pause();
+        if (mounted) {
+          setState(() => _playingVibeId = null);
+        }
+        return;
+      }
+      await _archivePlayer.stop();
+      await _archivePlayer.setUrl(vibe.audioUrl);
+      if (mounted) {
+        setState(() => _playingVibeId = vibe.id);
+      }
+      await _archivePlayer.play();
+    } on Object {
+      if (mounted) {
+        setState(() => _playingVibeId = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This archive could not be played.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteArchive(VibeFeedItem vibe) async {
+    final token = ref.read(authControllerProvider).token;
+    if (token == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this vibe?'),
+        content: const Text('This removes it from your profile and discovery.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    try {
+      if (_playingVibeId == vibe.id) {
+        await _archivePlayer.stop();
+        setState(() => _playingVibeId = null);
+      }
+      await ref.read(apiClientProvider).deleteVibe(token, vibe.id);
+      _refreshVibes();
+      ref.invalidate(userStatusProvider);
+    } on SvibeApiException catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.message)));
       }
     }
   }
@@ -761,16 +855,29 @@ class _SettingsPanel extends StatelessWidget {
 }
 
 class _RecentArchiveList extends StatelessWidget {
-  const _RecentArchiveList({required this.vibes});
+  const _RecentArchiveList({
+    required this.vibes,
+    required this.playingVibeId,
+    required this.onPlay,
+    required this.onDelete,
+  });
 
   final List<VibeFeedItem> vibes;
+  final String? playingVibeId;
+  final ValueChanged<VibeFeedItem> onPlay;
+  final ValueChanged<VibeFeedItem> onDelete;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         for (var i = 0; i < vibes.length; i++) ...[
-          _ArchiveTile(vibe: vibes[i], isPlaying: i == 0),
+          _ArchiveTile(
+            vibe: vibes[i],
+            isPlaying: playingVibeId == vibes[i].id,
+            onPlay: () => onPlay(vibes[i]),
+            onDelete: () => onDelete(vibes[i]),
+          ),
           if (i != vibes.length - 1) const SizedBox(height: 14),
         ],
       ],
@@ -779,10 +886,17 @@ class _RecentArchiveList extends StatelessWidget {
 }
 
 class _ArchiveTile extends StatelessWidget {
-  const _ArchiveTile({required this.vibe, required this.isPlaying});
+  const _ArchiveTile({
+    required this.vibe,
+    required this.isPlaying,
+    required this.onPlay,
+    required this.onDelete,
+  });
 
   final VibeFeedItem vibe;
   final bool isPlaying;
+  final VoidCallback onPlay;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -793,7 +907,7 @@ class _ArchiveTile extends StatelessWidget {
         : 'Voice archive';
     return Container(
       height: 82,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.only(left: 14, right: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF1D1C1B),
         borderRadius: BorderRadius.circular(14),
@@ -801,16 +915,15 @@ class _ArchiveTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: isPlaying
+          IconButton.filled(
+            onPressed: onPlay,
+            style: IconButton.styleFrom(
+              backgroundColor: isPlaying
                   ? const Color(0xFFE2DED6)
                   : const Color(0xFF2B2928),
-              shape: BoxShape.circle,
+              fixedSize: const Size(58, 58),
             ),
-            child: Icon(
+            icon: Icon(
               isPlaying ? Icons.pause : Icons.play_arrow,
               color: isPlaying
                   ? const Color(0xFF111111)
@@ -852,6 +965,11 @@ class _ArchiveTile extends StatelessWidget {
               fontSize: 16,
               fontWeight: FontWeight.w900,
             ),
+          ),
+          IconButton(
+            tooltip: 'Delete vibe',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline, color: Color(0xFFC0BBB4)),
           ),
         ],
       ),

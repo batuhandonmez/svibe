@@ -235,6 +235,10 @@ class SvibeApiClient {
     );
   }
 
+  Future<void> deleteVibe(String token, String vibeId) async {
+    await _delete('/vibes/$vibeId', token: token);
+  }
+
   Future<List<DmThread>> dmThreads(String token) async {
     final response = await _get('/dm/threads', token: token);
     final data = response.data as Map<String, dynamic>;
@@ -327,6 +331,15 @@ class SvibeApiClient {
       () => _dio.patch<dynamic>(
         path,
         data: data,
+        options: Options(headers: _headers(token)),
+      ),
+    );
+  }
+
+  Future<Response<dynamic>> _delete(String path, {String? token}) {
+    return _guarded(
+      () => _dio.delete<dynamic>(
+        path,
         options: Options(headers: _headers(token)),
       ),
     );

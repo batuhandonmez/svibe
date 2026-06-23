@@ -81,7 +81,11 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _api.clearToken();
+    try {
+      await _api.clearToken();
+    } on Object {
+      // ponytail: logout should not crash the app if secure storage cleanup fails.
+    }
     token = null;
     user = null;
     error = null;
