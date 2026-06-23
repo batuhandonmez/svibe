@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -188,6 +188,17 @@ def seed_demo_data(db: Session) -> None:
 
     db.execute(delete(VibeSwipe).where(VibeSwipe.user_id == demo_user.id))
     db.execute(delete(VibeListen).where(VibeListen.user_id == demo_user.id))
+    old_thread_ids = db.scalars(
+        select(DmThread.id).where(
+            or_(
+                DmThread.user_low_id == demo_user.id,
+                DmThread.user_high_id == demo_user.id,
+            )
+        )
+    ).all()
+    if old_thread_ids:
+        db.execute(delete(DmMessage).where(DmMessage.thread_id.in_(old_thread_ids)))
+        db.execute(delete(DmThread).where(DmThread.id.in_(old_thread_ids)))
 
     expires_at = utc_now() + timedelta(days=7)
     for payload in [*DEMO_VIBES, *DEMO_OWN_VIBES]:
@@ -196,18 +207,9 @@ def seed_demo_data(db: Session) -> None:
 
     peer = users["demo_creator"]
     low_id, high_id = _thread_pair(demo_user, peer)
-    thread = db.scalar(
-        select(DmThread).where(
-            DmThread.user_low_id == low_id,
-            DmThread.user_high_id == high_id,
-        )
-    )
-    if thread is None:
-        thread = DmThread(user_low_id=low_id, user_high_id=high_id)
-        db.add(thread)
-        db.flush()
-    else:
-        db.execute(delete(DmMessage).where(DmMessage.thread_id == thread.id))
+    thread = DmThread(user_low_id=low_id, user_high_id=high_id)
+    db.add(thread)
+    db.flush()
 
     for sender_username, text in DEMO_MESSAGES:
         sender = users[sender_username]

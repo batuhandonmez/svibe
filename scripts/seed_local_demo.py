@@ -10,7 +10,7 @@ import wave
 from datetime import timedelta
 from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
@@ -238,6 +238,18 @@ def main() -> None:
                     VibeSwipe.vibe_id.in_(demo_vibe_ids),
                 )
             )
+
+        old_thread_ids = db.scalars(
+            select(DmThread.id).where(
+                or_(
+                    DmThread.user_low_id == viewer.id,
+                    DmThread.user_high_id == viewer.id,
+                )
+            )
+        ).all()
+        if old_thread_ids:
+            db.execute(delete(DmMessage).where(DmMessage.thread_id.in_(old_thread_ids)))
+            db.execute(delete(DmThread).where(DmThread.id.in_(old_thread_ids)))
 
         add_thread(
             db,
