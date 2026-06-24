@@ -110,7 +110,7 @@ def test_demo_seed_rewrites_stale_demo_audio_urls_and_duplicates(monkeypatch):
         )
 
 
-def test_demo_listener_sees_golden_then_latest_creator_vibe(monkeypatch):
+def test_demo_listener_sees_normal_then_golden_and_resets_on_login(monkeypatch):
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
     monkeypatch.setattr(vibes_router, "create_presigned_audio_url", lambda value: value)
     with SessionLocal() as db:
@@ -127,7 +127,34 @@ def test_demo_listener_sees_golden_then_latest_creator_vibe(monkeypatch):
         )
         headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
         first = client.get("/vibes/discover/next", headers=headers)
-        assert first.json()["item"]["is_golden_voice"] is True
+        first_item = first.json()["item"]
+        assert first_item["is_golden_voice"] is False
+
+        queued = client.get(
+            "/vibes/discover/next",
+            headers=headers,
+            params={"exclude_id": first_item["id"]},
+        )
+        assert queued.json()["item"]["is_golden_voice"] is True
+
+        with SessionLocal() as db:
+            listener = db.scalar(select(User).where(User.username == "demo_listener"))
+            db.add(
+                VibeSwipe(
+                    user_id=listener.id,
+                    vibe_id=UUID(first_item["id"]),
+                    direction="like",
+                )
+            )
+            db.commit()
+
+        login = client.post(
+            "/auth/login",
+            json={"username": "demo_listener", "password": "demo12345"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        reset_first = client.get("/vibes/discover/next", headers=headers)
+        assert reset_first.json()["item"]["is_golden_voice"] is False
 
         with SessionLocal() as db:
             listener = db.scalar(select(User).where(User.username == "demo_listener"))

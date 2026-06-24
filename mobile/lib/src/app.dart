@@ -68,13 +68,16 @@ class AuthGate extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
 
     if (auth.isBooting) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        key: ValueKey('booting'),
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (auth.isAuthenticated) {
-      return const AppShell();
+      return const AppShell(key: ValueKey('app-shell'));
     }
 
-    return const AuthScreen();
+    return const AuthScreen(key: ValueKey('auth-screen'));
   }
 }

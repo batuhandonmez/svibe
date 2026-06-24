@@ -4,7 +4,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -164,18 +164,24 @@ def discover_next_vibe(
     if not rows:
         return DiscoverResponse(item=None)
 
-    demo_should_show_golden_first = (
+    demo_should_stage_unlock = (
         settings.ENVIRONMENT.lower() in {"development", "dev"}
-        and current_user.username in {"demo_user", "demo_listener"}
+        and current_user.username == "demo_listener"
         and current_user.is_muted
     )
-    if demo_should_show_golden_first:
-        golden_rows = [(vibe, owner) for vibe, owner in rows if vibe.is_golden_voice]
-        if golden_rows:
-            vibe, owner = max(golden_rows, key=lambda row: row[0].swipe_right_count)
+    if demo_should_stage_unlock:
+        swipe_count = db.scalar(
+            select(func.count()).select_from(VibeSwipe).where(
+                VibeSwipe.user_id == current_user.id
+            )
+        )
+        if swipe_count == 0 and exclude_id is None:
+            normal_rows = [(vibe, owner) for vibe, owner in rows if not vibe.is_golden_voice]
+            choices = normal_rows or rows
         else:
-            weights = [max(1, vibe.swipe_right_count + 1) for vibe, _ in rows]
-            vibe, owner = random.choices(rows, weights=weights, k=1)[0]
+            golden_rows = [(vibe, owner) for vibe, owner in rows if vibe.is_golden_voice]
+            choices = golden_rows or rows
+        vibe, owner = max(choices, key=lambda row: row[0].swipe_right_count)
     else:
         creator_rows = [
             (vibe, owner) for vibe, owner in rows if owner.username == "demo_creator"

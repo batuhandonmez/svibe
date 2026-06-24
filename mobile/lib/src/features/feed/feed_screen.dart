@@ -130,8 +130,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     VibeFeedItem item,
   ) async {
     await api.startListening(token, item.id);
-    await _player.setUrl(item.audioUrl);
     _startUnlockCountdown();
+    try {
+      await _player.setUrl(item.audioUrl);
+    } on Object {
+      if (mounted) {
+        setState(() => _error = 'This voice could not be played.');
+      }
+      return;
+    }
     unawaited(
       _player.play().catchError((Object _) {
         // Browsers may block autoplay until the user taps.
@@ -197,10 +204,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   }
 
   Future<void> _togglePlayback() async {
-    if (_player.playing) {
-      await _player.pause();
-    } else {
-      await _player.play();
+    try {
+      if (_player.playing) {
+        await _player.pause();
+      } else {
+        await _player.play();
+      }
+    } on Object {
+      if (mounted) {
+        setState(() => _error = 'This voice could not be played.');
+      }
     }
   }
 

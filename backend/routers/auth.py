@@ -1,9 +1,10 @@
 # backend/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.database import get_db
 from core.security import (
     create_access_token,
@@ -12,6 +13,8 @@ from core.security import (
     verify_password,
 )
 from models.user import User
+from models.vibe_listen import VibeListen
+from models.vibe_swipe import VibeSwipe
 from routers.users import _onboarding_state
 from schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from schemas.users import UserRead
@@ -24,6 +27,21 @@ def _token_response(user: User) -> TokenResponse:
         access_token=create_access_token(user.id),
         user=UserRead.model_validate(user),
     )
+
+
+def _reset_demo_feed_history(user: User, db: Session) -> None:
+    if (
+        settings.ENVIRONMENT.lower() not in {"development", "dev"}
+        or user.username != "demo_listener"
+    ):
+        return
+    db.execute(delete(VibeSwipe).where(VibeSwipe.user_id == user.id))
+    db.execute(delete(VibeListen).where(VibeListen.user_id == user.id))
+    user.is_muted = True
+    user.daily_vibe_count = 0
+    db.add(user)
+    db.commit()
+    db.refresh(user)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -62,6 +80,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
         )
+    _reset_demo_feed_history(user, db)
     return _token_response(user)
 
 
