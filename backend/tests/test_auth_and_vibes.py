@@ -396,6 +396,9 @@ def test_vibe_upload_feed_and_golden_voice_unlock(monkeypatch):
         )
         assert listener_swipe.status_code == 200
         assert listener_swipe.json()["golden_voice_unlocked"] is True
+        listener_status = client.get("/users/me/status", headers=_headers(listener))
+        assert listener_status.status_code == 200
+        assert listener_status.json()["can_upload_vibe"] is True
 
         repeated_swipe = client.post(
             f"/vibes/{vibe['id']}/swipe",

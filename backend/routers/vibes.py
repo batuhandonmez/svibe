@@ -28,6 +28,7 @@ from schemas.vibes import (
     VibeRead,
     VibeUploadResponse,
 )
+from services.quota import daily_vibe_limit_for_user
 from services.s3_storage import (
     create_presigned_audio_url,
     delete_audio_file,
@@ -447,6 +448,8 @@ def swipe_vibe(
         and payload.golden_unlock_confirmed
     ):
         current_user.is_muted = False
+        if current_user.daily_vibe_count <= 0:
+            current_user.daily_vibe_count = daily_vibe_limit_for_user(current_user)
         unlocked = True
         message = "Shake your vibe complete. Speaking rights granted."
 
